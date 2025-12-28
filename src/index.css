@@ -4,9 +4,9 @@
 
 /* Custom MacroX Animations & Styles */
 @keyframes neon-pulse {
-  0% { filter: drop-shadow(0 0 5px #3b82f6) drop-shadow(0 0 10px #8b5cf6); }
-  50% { filter: drop-shadow(0 0 15px #3b82f6) drop-shadow(0 0 25px #8b5cf6); }
-  100% { filter: drop-shadow(0 0 5px #3b82f6) drop-shadow(0 0 10px #8b5cf6); }
+  0% { filter: drop-shadow(0 0 5px #6366f1) drop-shadow(0 0 10px #8b5cf6); }
+  50% { filter: drop-shadow(0 0 15px #6366f1) drop-shadow(0 0 25px #8b5cf6); }
+  100% { filter: drop-shadow(0 0 5px #6366f1) drop-shadow(0 0 10px #8b5cf6); }
 }
 
 .neon-logo {
@@ -14,9 +14,9 @@
 }
 
 @keyframes logo-glow-pulse {
-  0% { text-shadow: 0 0 10px rgba(59, 130, 246, 0.2); }
-  50% { text-shadow: 0 0 25px rgba(59, 130, 246, 0.6), 0 0 40px rgba(139, 92, 246, 0.4); }
-  100% { text-shadow: 0 0 10px rgba(59, 130, 246, 0.2); }
+  0% { text-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
+  50% { text-shadow: 0 0 25px rgba(99, 102, 241, 0.6), 0 0 40px rgba(139, 92, 246, 0.4); }
+  100% { text-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
 }
 
 .logo-glow-pulse {
@@ -25,9 +25,9 @@
 
 /* Lueur active pour les touches */
 .key-glow-active {
-  background: rgba(59, 130, 246, 0.3) !important;
-  border: 2px solid #3b82f6 !important;
-  box-shadow: 0 0 15px #3b82f6, inset 0 0 10px #3b82f6;
+  background: rgba(99, 102, 241, 0.3) !important;
+  border: 2px solid #6366f1 !important;
+  box-shadow: 0 0 15px #6366f1, inset 0 0 10px #6366f1;
   animation: pulse-glow 2s infinite;
 }
 
@@ -74,58 +74,49 @@
 }
 
 .mouse-glow {
-  filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.2));
+  filter: drop-shadow(0 0 15px rgba(99, 102, 241, 0.2));
 }
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  --bg-primary: #F8F9FA;
+  --card-bg: #FFFFFF;
+  --text-primary: #212529;
+  --border-color: #E9ECEF;
+  --sidebar-bg: #FFFFFF;
+  --accent-blue: #6366f1;
+  --accent-purple: #8b5cf6;
+}
 
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #0f111a;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+[data-theme='dark'] {
+  --bg-primary: #0f111a;
+  --card-bg: #1a1d2e;
+  --text-primary: #f8fafc;
+  --border-color: rgba(255, 255, 255, 0.05);
+  --sidebar-bg: #0f111a;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.5s ease, color 0.5s ease;
 }
 
-#root {
-  width: 100%;
-  height: 100vh;
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
 }
 
-.key-rect {
-  transition: all 0.2s;
-  cursor: pointer;
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.key-rect:hover {
-  fill: #4f46e5;
-  filter: brightness(1.2);
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 10px;
 }
 
-.key-rect.active {
-  fill: #6366f1;
-  stroke: #818cf8;
-  stroke-width: 2;
-}
-
-@keyframes pulse-soft {
-  0%, 100% { opacity: 0.2; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.1); }
-}
-
-.animate-pulse-soft {
-  animation: pulse-soft 3s infinite;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.3);
 }

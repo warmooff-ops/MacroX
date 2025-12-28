@@ -20,12 +20,13 @@ export const KEY_MAPPINGS: Record<string, KeyMapping> = {
   'Digit8': { id: 'Digit8', labels: { AZERTY: '8', QWERTY: '8', QWERTZ: '8' } },
   'Digit9': { id: 'Digit9', labels: { AZERTY: '9', QWERTY: '9', QWERTZ: '9' } },
   'Digit0': { id: 'Digit0', labels: { AZERTY: '0', QWERTY: '0', QWERTZ: '0' } },
+  'DigitDegree': { id: 'DigitDegree', labels: { AZERTY: '°', QWERTY: '°', QWERTZ: '°' } },
   'Minus': { id: 'Minus', labels: { AZERTY: ')', QWERTY: '-', QWERTZ: 'ß' } },
   'Equal': { id: 'Equal', labels: { AZERTY: '=', QWERTY: '=', QWERTZ: '´' } },
 
   // Row 2
-  'KeyQ': { id: 'KeyQ', labels: { AZERTY: 'A', QWERTY: 'Q', QWERTZ: 'Q' } },
-  'KeyW': { id: 'KeyW', labels: { AZERTY: 'Z', QWERTY: 'W', QWERTZ: 'W' } },
+  'KeyQ': { id: 'KeyQ', labels: { AZERTY: 'Q', QWERTY: 'Q', QWERTZ: 'Q' } },
+  'KeyW': { id: 'KeyW', labels: { AZERTY: 'W', QWERTY: 'W', QWERTZ: 'W' } },
   'KeyE': { id: 'KeyE', labels: { AZERTY: 'E', QWERTY: 'E', QWERTZ: 'E' } },
   'KeyR': { id: 'KeyR', labels: { AZERTY: 'R', QWERTY: 'R', QWERTZ: 'R' } },
   'KeyT': { id: 'KeyT', labels: { AZERTY: 'T', QWERTY: 'T', QWERTZ: 'T' } },
@@ -38,7 +39,7 @@ export const KEY_MAPPINGS: Record<string, KeyMapping> = {
   'BracketRight': { id: 'BracketRight', labels: { AZERTY: '$', QWERTY: ']', QWERTZ: '*' } },
 
   // Row 3
-  'KeyA': { id: 'KeyA', labels: { AZERTY: 'Q', QWERTY: 'A', QWERTZ: 'A' } },
+  'KeyA': { id: 'KeyA', labels: { AZERTY: 'A', QWERTY: 'A', QWERTZ: 'A' } },
   'KeyS': { id: 'KeyS', labels: { AZERTY: 'S', QWERTY: 'S', QWERTZ: 'S' } },
   'KeyD': { id: 'KeyD', labels: { AZERTY: 'D', QWERTY: 'D', QWERTZ: 'D' } },
   'KeyF': { id: 'KeyF', labels: { AZERTY: 'F', QWERTY: 'F', QWERTZ: 'F' } },
@@ -53,7 +54,7 @@ export const KEY_MAPPINGS: Record<string, KeyMapping> = {
 
   // Row 4
   'IntlBackslash': { id: 'IntlBackslash', labels: { AZERTY: '<', QWERTY: '\\', QWERTZ: '<' } },
-  'KeyZ': { id: 'KeyZ', labels: { AZERTY: 'W', QWERTY: 'Z', QWERTZ: 'Y' } }, // QWERTZ swap Y/Z
+  'KeyZ': { id: 'KeyZ', labels: { AZERTY: 'Z', QWERTY: 'Z', QWERTZ: 'Y' } }, // QWERTZ swap Y/Z
   'KeyX': { id: 'KeyX', labels: { AZERTY: 'X', QWERTY: 'X', QWERTZ: 'X' } },
   'KeyC': { id: 'KeyC', labels: { AZERTY: 'C', QWERTY: 'C', QWERTZ: 'C' } },
   'KeyV': { id: 'KeyV', labels: { AZERTY: 'V', QWERTY: 'V', QWERTZ: 'V' } },
@@ -66,13 +67,70 @@ export const KEY_MAPPINGS: Record<string, KeyMapping> = {
 };
 
 export function getKeyLabel(id: string, layout: KeyboardLayout = 'AZERTY'): string {
+  // Systematic abbreviations
+  const abbreviations: Record<string, string> = {
+    'Insert': 'Ins', 'INSERT': 'Ins',
+    'Delete': 'Del', 'DELETE': 'Del',
+    'Home': 'Hme', 'HOME': 'Hme',
+    'PageUp': 'PgU', 'PAGEUP': 'PgU',
+    'PageDown': 'PgD', 'PAGEDOWN': 'PgD',
+    'End': 'End', 'END': 'End',
+    'Numpad7': '7',
+    'Numpad8': '8',
+    'Numpad9': '9',
+    'Numpad4': '4',
+    'Numpad5': '5',
+    'Numpad6': '6',
+    'Numpad1': '1',
+    'Numpad2': '2',
+    'Numpad3': '3',
+    'Numpad0': '0',
+    'NumpadAdd': '+', 'NUMPADADD': '+',
+    'NumpadSubtract': '-', 'NUMPADSUBTRACT': '-',
+    'NumpadMultiply': '*', 'NUMPADMULTIPLY': '*',
+    'NumpadDivide': '/', 'NUMPADDIVIDE': '/',
+    'NumpadDecimal': '.', 'NUMPADDECIMAL': '.',
+    'NumpadEnter': '↵', 'NUMPADENTER': '↵',
+    'Enter': '↵', 'ENTER': '↵',
+    'Backspace': '⌫', 'BACKSPACE': '⌫',
+    'Tab': '↹', 'TAB': '↹',
+    'CapsLock': '⇪', 'CAPSLOCK': '⇪',
+    'ShiftLeft': '⇧', 'SHIFTLEFT': '⇧',
+    'ShiftRight': '⇧', 'SHIFTRIGHT': '⇧',
+    'ControlLeft': 'Ctrl', 'CONTROLLEFT': 'Ctrl',
+    'ControlRight': 'Ctrl', 'CONTROLRIGHT': 'Ctrl',
+    'AltLeft': 'Alt', 'ALTLEFT': 'Alt',
+    'AltRight': 'AltGr', 'ALTRIGHT': 'AltGr',
+    'MetaLeft': 'Win', 'METALEFT': 'Win',
+    'Escape': 'Esc', 'ESCAPE': 'Esc',
+    'ArrowUp': '↑', 'ARROWUP': '↑',
+    'ArrowDown': '↓', 'ARROWDOWN': '↓',
+    'ArrowLeft': '←', 'ARROWLEFT': '←',
+    'ArrowRight': '→', 'ARROWRIGHT': '→',
+    'NumpadPlus': '+',
+    'MouseButtonLeft': 'G',
+    'MouseButtonRight': 'D',
+    'MouseButtonMiddle': 'Milieu',
+    'MouseButtonForward': 'F',
+    'MouseButtonBack': 'B',
+    'MouseLeft': 'G',
+    'MouseRight': 'D',
+    'MouseMiddle': 'Milieu',
+    'MouseForward': 'F',
+    'MouseBack': 'B',
+    'Space': 'Espace',
+    'SPACE': 'Espace',
+  };
+
+  if (abbreviations[id]) return abbreviations[id];
+
   const mapping = KEY_MAPPINGS[id];
   if (mapping) {
     return mapping.labels[layout];
   }
   
   // Return the ID itself if no mapping found, but cleaned up
-  return id.replace('Key', '').replace('Digit', '');
+  return id.replace('Key', '').replace('Digit', '').replace('Numpad', 'Num ');
 }
 
 /**

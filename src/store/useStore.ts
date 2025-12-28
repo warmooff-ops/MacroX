@@ -9,6 +9,7 @@ interface Action {
   x?: number;
   y?: number;
   delay_ms: number;
+  duration_ms?: number;
 }
 
 interface MacroConfig {
@@ -106,7 +107,7 @@ export const useStore = create<AppState>((set, get) => ({
     time_unit: 'ms',
     active_profile: 'Default',
     opacity: 95,
-    illumination_color: '#3b82f6',
+    illumination_color: '#6366f1',
     refresh_rate: 1
   },
   translations: {},
@@ -121,6 +122,12 @@ export const useStore = create<AppState>((set, get) => ({
     set({ activeProfile });
     await get().updateSettings({ active_profile: activeProfile });
     await get().loadMacros();
+    // Persister le changement de profil
+    try {
+      await invoke("save_profile_to_disk", { profile: { name: activeProfile } });
+    } catch (e) {
+      console.error("Erreur de sauvegarde profil:", e);
+    }
   },
   setMacros: (macros) => set({ macros }),
   setIsSidebarOpen: (isSidebarOpen) => set({ isSidebarOpen }),
@@ -180,12 +187,17 @@ export const useStore = create<AppState>((set, get) => ({
       await invoke("save_macro", { 
         macroConfig: normalizedMacro 
       });
+      
+      // Sauvegarder aussi le profil actuel sur le disque
+      const currentProfile = get().activeProfile;
+      await invoke("save_profile_to_disk", { profile: { name: currentProfile } });
+
       await get().loadMacros();
-      get().addNotification(get().t('macro_saved_success') || 'Macro sauvegardée !', 'success');
+      get().addNotification('Macro sauvegardée !', 'success');
       return { success: true };
     } catch (error) {
       console.error("Failed to save macro:", error);
-      get().addNotification(get().t('macro_save_failed') || 'Erreur lors de la sauvegarde', 'error');
+      get().addNotification('Erreur lors de la sauvegarde', 'error');
       return { success: false, error: "save_failed" };
     }
   },
@@ -263,7 +275,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   createProfile: async (name: string) => {
     try {
-      await invoke("save_profile", { profile: { name } });
+      const profile = { name };
+      await invoke("save_profile", { profile });
+      await invoke("save_profile_to_disk", { profile });
       await get().loadProfiles();
       await get().setProfile(name);
     } catch (error) {
@@ -301,11 +315,11 @@ export const useStore = create<AppState>((set, get) => ({
 
       await invoke("save_macro", { macroConfig: newMacro });
       await get().loadMacros();
-      get().addNotification(get().t('macro_bound_success') || 'Macro liée à la touche !', 'success');
+      get().addNotification('Macro liée à la touche !', 'success');
       return { success: true };
     } catch (error) {
       console.error("Failed to bind macro to key:", error);
-      get().addNotification(get().t('macro_bind_failed') || 'Erreur lors de la liaison', 'error');
+      get().addNotification('Erreur lors de la liaison', 'error');
       return { success: false, error: "bind_failed" };
     }
   },

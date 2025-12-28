@@ -5,25 +5,21 @@ use crate::models::{MacroConfig, AppSettings, Config, Profile};
 use base64::{Engine as _, engine::general_purpose};
 
 pub fn get_app_data_dir() -> PathBuf {
-    // Utilise explicitement le dossier AppData/Local/MacroX comme demandé
-    let mut path = match std::env::var("LOCALAPPDATA") {
-        Ok(val) => PathBuf::from(val),
-        Err(_) => {
-            // Fallback si la variable d'env n'existe pas (cas rare sur Windows)
-            if let Some(proj_dirs) = ProjectDirs::from("", "", "MacroX") {
-                proj_dirs.data_local_dir().to_path_buf()
-            } else {
-                PathBuf::from("./data")
+    // Récupère le chemin vers C:\Users\Nom\Documents\MacroX
+    let mut path = directories::UserDirs::new()
+        .and_then(|dirs| dirs.document_dir().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| {
+            // Fallback si document_dir échoue
+            match std::env::var("USERPROFILE") {
+                Ok(val) => PathBuf::from(val).join("Documents"),
+                Err(_) => PathBuf::from("./data")
             }
-        }
-    };
+        });
     
-    if path.to_str().map(|s| s.contains("AppData\\Local")).unwrap_or(false) {
-        path.push("MacroX");
-    }
+    path.push("MacroX");
 
     if !path.exists() {
-        fs::create_dir_all(&path).expect("Failed to create AppData directory");
+        fs::create_dir_all(&path).expect("Failed to create MacroX directory in Documents");
     }
     path
 }

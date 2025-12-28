@@ -30,6 +30,30 @@ fn init_folders() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn init_custom_folder(path: String) -> Result<String, String> {
+    let mut target_path = PathBuf::from(path);
+    if !target_path.exists() {
+        fs::create_dir_all(&target_path)
+            .map_err(|e| format!("Impossible de créer le dossier : {}", e))?;
+    }
+    
+    // Initialiser les sous-dossiers
+    let mut macros_path = target_path.clone();
+    macros_path.push("macros");
+    if !macros_path.exists() {
+        fs::create_dir_all(&macros_path).ok();
+    }
+    
+    let mut profiles_path = target_path.clone();
+    profiles_path.push("profiles");
+    if !profiles_path.exists() {
+        fs::create_dir_all(&profiles_path).ok();
+    }
+
+    Ok(target_path.to_str().unwrap().to_string())
+}
+
+#[tauri::command]
 fn start_mouse_capture() {
     hook::set_capturing(true);
 }
@@ -163,8 +187,66 @@ async fn save_profile(profile: Profile) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn save_profile_to_disk(profile: Profile) -> Result<(), String> {
+    let mut path = persistence::get_app_data_dir();
+    
+    path.push("profiles");
+    
+    if !path.exists() {
+        fs::create_dir_all(&path)
+            .map_err(|e| format!("Impossible de créer le dossier profiles : {}", e))?;
+    }
+    
+    let safe_name = profile.name.chars()
+        .map(|c: char| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+        
+    path.push(format!("{}.json", safe_name));
+    
+    let content = serde_json::to_string_pretty(&profile)
+        .map_err(|e| format!("Erreur de sérialisation : {}", e))?;
+        
+    fs::write(path, content)
+        .map_err(|e| format!("Erreur d'écriture : {}", e))?;
+        
+    Ok(())
+}
+
+#[tauri::command]
 async fn delete_profile(name: String) -> Result<(), String> {
     del_profile(&name)?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn create_profile_file(name: String) -> Result<(), String> {
+    let mut path = persistence::get_profiles_dir();
+    
+    if !path.exists() {
+        fs::create_dir_all(&path)
+            .map_err(|e| format!("Impossible de créer le dossier profiles : {}", e))?;
+    }
+    
+    let safe_name = name.chars()
+        .map(|c: char| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+        
+    path.push(format!("{}.json", safe_name));
+    
+    if !path.exists() {
+        let profile = Profile {
+            name: name.clone(),
+            settings: None,
+            macros: Some(Vec::new()),
+        };
+        
+        let content = serde_json::to_string_pretty(&profile)
+            .map_err(|e| format!("Erreur de sérialisation : {}", e))?;
+            
+        fs::write(path, content)
+            .map_err(|e| format!("Erreur d'écriture : {}", e))?;
+    }
+        
     Ok(())
 }
 
@@ -287,6 +369,7 @@ fn main() {
             import_macro_base64,
             get_all_profiles,
             save_profile,
+            save_profile_to_disk,
             delete_profile,
             get_config,
             save_config,
@@ -295,10 +378,12 @@ fn main() {
             get_active_app,
             get_active_apps,
             init_folders,
+            init_custom_folder,
             start_mouse_capture,
             get_mouse_position,
             open_macros_folder,
-            open_profiles_folder
+            open_profiles_folder,
+            create_profile_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -13,7 +13,7 @@
   "executionMode": "Mode d'Exécution",
   "once": "Une fois",
   "hold": "Maintenir",
-  "toggle": "Bascule",
+  "toggle": "Répéter",
   "actionSequence": "Séquence d'Actions",
   "noActions": "Aucune action définie. Commencez par en ajouter une !",
   "addKeyDown": "Touche Pressée",

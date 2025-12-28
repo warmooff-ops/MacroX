@@ -85,13 +85,13 @@ const VisualKeyboard: React.FC<VisualKeyboardProps> = ({
                   h-12 flex items-center justify-center rounded-lg text-[11px] font-bold transition-all duration-200
                   active:scale-95 border
                   ${isSelected 
-                    ? 'bg-blue-600 border-blue-400 text-white ring-2 ring-blue-500 ring-offset-2 scale-[1.02] z-10' 
-                    : isActive
-                      ? 'bg-blue-500/40 border-blue-400/50 text-white'
-                      : isLight 
-                        ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-blue-400 hover:text-blue-600'
-                        : 'bg-[#1a1d23] border-white/5 text-white/80 hover:bg-white/10 hover:border-blue-500/50 hover:text-white'
-                  }
+          ? 'bg-primary border-primary text-white ring-2 ring-primary ring-offset-2 scale-[1.02] z-10' 
+          : isActive
+            ? 'bg-primary/40 border-primary/50 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)]'
+            : isLight 
+              ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-primary hover:text-primary'
+              : 'bg-[#1a1d23] border-white/5 text-white/80 hover:bg-white/10 hover:border-primary/50 hover:text-white'
+        }
                 `}
               >
                 {key.label}
