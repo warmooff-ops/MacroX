@@ -137,13 +137,17 @@ export function getKeyLabel(id: string, layout: KeyboardLayout = 'AZERTY'): stri
  * Normalizes key names between frontend (e.g. "KeyQ") and backend (e.g. "Q")
  */
 export function normalizeKeyId(id: string): string {
-  return id.replace('Key', '').replace('Digit', '').toUpperCase();
+  if (id === 'UNASSIGNED') return id;
+  // Keep mouse buttons as they are but ensure consistency
+  if (id.startsWith('Mouse')) return id;
+  return id.replace('Key', '').replace('Digit', '');
 }
 
 /**
  * Denormalizes key names from backend (e.g. "Q") to frontend (e.g. "KeyQ")
  */
 export function denormalizeKeyId(id: string): string {
+  if (id === 'UNASSIGNED') return id;
   if (id.length === 1 && /[A-Z]/.test(id)) {
     return `Key${id}`;
   }

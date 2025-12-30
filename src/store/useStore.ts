@@ -206,8 +206,11 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       await invoke("delete_macro", { name });
       await get().loadMacros();
+      get().addNotification(`Macro "${name}" supprimée`, 'success');
     } catch (error) {
       console.error("Failed to delete macro:", error);
+      const errorMessage = typeof error === 'string' ? error : 'Erreur lors de la suppression';
+      get().addNotification(errorMessage, 'error');
     }
   },
 
@@ -302,18 +305,32 @@ export const useStore = create<AppState>((set, get) => ({
       const macro = get().macros.find(m => m.id === macroId);
       if (!macro) return { success: false, error: "macro_not_found" };
 
-      // Si la touche a déjà une macro, on peut soit l'écraser, soit créer une nouvelle
-      // Ici on va cloner la macro pour la nouvelle touche (comportement attendu du drag & drop)
-      const newMacro: MacroConfig = {
-        ...macro,
-        id: crypto.randomUUID(), // Nouvel ID pour éviter les conflits
-        trigger: {
-          ...macro.trigger,
-          key: normalizeKeyId(keyId)
-        }
-      };
+      const normalizedKey = normalizeKeyId(keyId);
 
-      await invoke("save_macro", { macroConfig: newMacro });
+      // Si la touche est 'UNASSIGNED', on met simplement à jour la macro existante
+      // Sinon, on clone la macro pour la nouvelle touche (comportement attendu du drag & drop)
+      if (macro.trigger.key === 'UNASSIGNED') {
+        const updatedMacro: MacroConfig = {
+          ...macro,
+          trigger: {
+            ...macro.trigger,
+            key: normalizedKey
+          }
+        };
+        await invoke("save_macro", { macroConfig: updatedMacro });
+      } else {
+        // Si on glisse une macro déjà assignée sur une nouvelle touche
+        const newMacro: MacroConfig = {
+          ...macro,
+          id: crypto.randomUUID(),
+          trigger: {
+            ...macro.trigger,
+            key: normalizedKey
+          }
+        };
+        await invoke("save_macro", { macroConfig: newMacro });
+      }
+
       await get().loadMacros();
       get().addNotification('Macro liée à la touche !', 'success');
       return { success: true };

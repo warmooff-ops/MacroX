@@ -16,7 +16,6 @@ use hook::{start_hook, reload_macros};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use tauri::Manager; // Required for .path() and other handle methods in Tauri v2
 
 // Fonction pour initialiser les dossiers de l'application
 #[tauri::command]
@@ -31,7 +30,7 @@ fn init_folders() -> Result<String, String> {
 
 #[tauri::command]
 fn init_custom_folder(path: String) -> Result<String, String> {
-    let mut target_path = PathBuf::from(path);
+    let target_path = PathBuf::from(path);
     if !target_path.exists() {
         fs::create_dir_all(&target_path)
             .map_err(|e| format!("Impossible de créer le dossier : {}", e))?;
@@ -165,7 +164,7 @@ async fn load_macros_robust() -> Result<Vec<MacroConfig>, String> {
 async fn delete_macro(name: String) -> Result<(), String> {
     let config = load_config();
     let profile = config.settings.active_profile;
-    del_macro(&name, &profile);
+    del_macro(&name, &profile)?;
     reload_macros();
     Ok(())
 }
@@ -268,6 +267,7 @@ fn get_config() -> Result<Config, String> {
 #[tauri::command]
 fn save_config(config: Config) -> Result<(), String> {
     persistence::save_config(&config);
+    reload_macros();
     Ok(())
 }
 
@@ -346,6 +346,8 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             println!("Initialisation de l'application MacroX...");
             let app_handle = app.handle();

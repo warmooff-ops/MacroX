@@ -11,7 +11,7 @@ import Mouse from './Mouse';
 
 import { getKeyLabel, normalizeKeyId, denormalizeKeyId } from '../utils/keyboardLayouts';
 
-export type Action = 
+export type Action =
   | { type: 'key_down', value: string, delay_ms: number }
   | { type: 'key_up', value: string, delay_ms: number }
   | { type: 'mouse_click', button: string, delay_ms: number, duration_ms?: number }
@@ -31,7 +31,7 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
   const { saveMacro, deleteMacro, loadMacros, settings, setSelectedKey, setView, isSidebarOpen, macros } = useStore();
   const isLight = theme === 'light';
   const timeUnit = settings.time_unit || 'ms';
-  
+
   const [name, setName] = useState(initialMacro?.name || '');
   const [isRenaming, setIsRenaming] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -46,12 +46,11 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
   const [globalDelay, setGlobalDelay] = useState<string>('50');
   const [msDuration, setMsDuration] = useState<string>('50');
   const [showGlobalDelayMenu, setShowGlobalDelayMenu] = useState(false);
-  const [showKeyPicker, setShowKeyPicker] = useState(false);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  
+
   const globalDelayRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(Date.now());
@@ -140,17 +139,6 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
 
   // Global events
   useEffect(() => {
-    const handleMacroCreated = (event: any) => {
-      if (event.detail && event.detail.key) {
-        setSelectedKey(event.detail.key);
-        setShowKeyPicker(false);
-      }
-    };
-    window.addEventListener('macro-key-selected', handleMacroCreated);
-    return () => window.removeEventListener('macro-key-selected', handleMacroCreated);
-  }, [setSelectedKey]);
-
-  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (globalDelayRef.current && !globalDelayRef.current.contains(event.target as Node)) {
         setShowGlobalDelayMenu(false);
@@ -182,19 +170,33 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
         const delay = currentTime - lastTime;
         lastTime = currentTime;
 
-        let keyValue = normalizeKeyId(event.code);
+        // DEBUG: Afficher ce que le système retourne
+        console.log('🔍 DEBUG - event.code:', event.code, '| event.key:', event.key);
 
+        // Utiliser event.key (caractère réel selon la disposition du système)
+        let keyValue = event.key.toUpperCase();
+
+        // Gérer les touches spéciales
         if (event.code === 'Enter') keyValue = 'ENTER';
         if (event.code === 'Backspace') keyValue = 'BACKSPACE';
         if (event.code === 'Tab') keyValue = 'TAB';
         if (event.code === 'Escape') keyValue = 'ESC';
+        if (event.code === 'Space') keyValue = 'SPACE';
+
+        // Pour les touches de contrôle
+        if (event.code.startsWith('Control')) keyValue = 'CTRL';
+        if (event.code.startsWith('Shift')) keyValue = 'SHIFT';
+        if (event.code.startsWith('Alt')) keyValue = event.code === 'AltRight' ? 'ALTGR' : 'ALT';
+        if (event.code.startsWith('Meta')) keyValue = 'WIN';
+
+        console.log('✅ Valeur enregistrée:', keyValue);
 
         setActions(prev => [...prev, { type: 'key_down', value: keyValue, delay_ms: delay > 0 ? delay : 50 }]);
       };
 
       const handleGlobalKeyUp = (event: KeyboardEvent) => {
         if (event.code !== 'F12' && event.code !== 'F11') event.preventDefault();
-        
+
         // Empêcher d'ajouter le clic sur "Stop Recording" à la macro
         if (isRecording && (event.code === 'Enter' || event.code === 'Space')) {
           // Si on est en train de cliquer sur le bouton arrêter via clavier
@@ -208,12 +210,21 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
         const delay = currentTime - lastTime;
         lastTime = currentTime;
 
-        let keyValue = normalizeKeyId(event.code);
+        // Utiliser event.key (caractère réel selon la disposition du système)
+        let keyValue = event.key.toUpperCase();
 
+        // Gérer les touches spéciales
         if (event.code === 'Enter') keyValue = 'ENTER';
         if (event.code === 'Backspace') keyValue = 'BACKSPACE';
         if (event.code === 'Tab') keyValue = 'TAB';
         if (event.code === 'Escape') keyValue = 'ESC';
+        if (event.code === 'Space') keyValue = 'SPACE';
+
+        // Pour les touches de contrôle
+        if (event.code.startsWith('Control')) keyValue = 'CTRL';
+        if (event.code.startsWith('Shift')) keyValue = 'SHIFT';
+        if (event.code.startsWith('Alt')) keyValue = event.code === 'AltRight' ? 'ALTGR' : 'ALT';
+        if (event.code.startsWith('Meta')) keyValue = 'WIN';
 
         setActions(prev => [...prev, { type: 'key_up', value: keyValue, delay_ms: delay > 0 ? delay : 50 }]);
       };
@@ -230,10 +241,10 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
         lastTime = currentTime;
         const buttons = ['left', 'middle', 'right', 'back', 'forward'];
         const buttonName = buttons[event.button] || 'left';
-        
+
         // Gérer le bouton central MS
         const finalButton = event.button === 1 ? 'middle' : buttonName;
-        
+
         setActions(prev => [...prev, { type: 'mouse_down', button: finalButton, delay_ms: 0 }]);
       };
 
@@ -249,10 +260,10 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
         lastTime = currentTime;
         const buttons = ['left', 'middle', 'right', 'back', 'forward'];
         const buttonName = buttons[event.button] || 'left';
-        
+
         // Gérer le bouton central MS
         const finalButton = event.button === 1 ? 'middle' : buttonName;
-        
+
         setActions(prev => [...prev, { type: 'mouse_up', button: finalButton, delay_ms: 0 }]);
       };
 
@@ -282,56 +293,8 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
   }
 
   // --- EARLY RETURN APRES TOUS LES HOOKS ---
-  if (!selectedKey && !showKeyPicker) {
-    return (
-      <div className={`flex-1 flex flex-col items-center justify-center p-10 text-center ${isLight ? 'bg-slate-50' : 'bg-[#0f111a]'}`}>
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md space-y-8"
-        >
-          <div className="relative">
-            <div className={`absolute inset-0 blur-3xl opacity-20 bg-primary rounded-full animate-pulse`} />
-            <div className={`relative w-24 h-24 mx-auto mb-8 rounded-3xl flex items-center justify-center border-2 border-dashed ${isLight ? 'bg-white border-slate-200 text-slate-300' : 'bg-white/5 border-white/10 text-white/20'}`}>
-              <Plus size={40} strokeWidth={1} />
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            <h2 className={`text-4xl font-black tracking-tight ${isLight ? 'text-slate-800' : 'text-white'}`}>
-              Étape 1
-            </h2>
-            <p className={`text-xl font-bold leading-relaxed ${isLight ? 'text-slate-500' : 'text-white/40'}`}>
-              Sélectionnez une touche sur le Dashboard pour commencer la configuration.
-            </p>
-          </div>
-
-          <button
-            onClick={() => setShowKeyPicker(true)}
-            className="group relative px-8 py-4 rounded-2xl bg-primary text-white font-black uppercase tracking-widest shadow-lg shadow-primary/25 hover:scale-105 hover:shadow-primary/40 active:scale-95 transition-all"
-          >
-            Sélectionner une touche
-          </button>
-
-          <div className={`pt-12 grid grid-cols-3 gap-6 opacity-30 ${isLight ? 'text-slate-400' : 'text-white'}`}>
-            <div className="space-y-2">
-              <div className="w-10 h-10 mx-auto rounded-xl border-2 border-current flex items-center justify-center font-black">1</div>
-              <p className="text-[10px] font-bold uppercase tracking-widest">Choisir</p>
-            </div>
-            <div className="space-y-2">
-              <div className="w-10 h-10 mx-auto rounded-xl border-2 border-current flex items-center justify-center font-black">2</div>
-              <p className="text-[10px] font-bold uppercase tracking-widest">Enregistrer</p>
-            </div>
-            <div className="space-y-2">
-              <div className="w-10 h-10 mx-auto rounded-xl border-2 border-current flex items-center justify-center font-black">3</div>
-              <p className="text-[10px] font-bold uppercase tracking-widest">Sauvegarder</p>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
+  // Supprimé : On ne veut plus de l'écran "Étape 1" de sélection de touche
+  
   // --- LOGIQUE AUXILIAIRE ---
   const convertFromMs = (valueInMs: number) => {
     switch (timeUnit) {
@@ -383,14 +346,14 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
   const toggleRecording = () => {
     if (isRecording) {
       setIsRecording(false);
-      
+
       // Nettoyage agressif pour empêcher d'ajouter le clic sur "Stop Recording" à la macro
       setActions(prev => {
         if (prev.length > 0) {
           // On identifie les actions de clic (down/up) à la fin de la séquence
           let newActions = [...prev];
           let removedCount = 0;
-          
+
           // On retire les dernières actions si ce sont des clics (généralement mouse_down + mouse_up)
           // On recule depuis la fin
           for (let i = newActions.length - 1; i >= 0; i--) {
@@ -417,7 +380,7 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
   };
 
   const handleSave = async () => {
-    if (!name.trim() || actions.length === 0 || !selectedKey) {
+    if (!name.trim() || actions.length === 0) {
       setError("Veuillez remplir tous les champs");
       return;
     }
@@ -426,14 +389,19 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
       const macro = {
         id: initialMacro?.id || crypto.randomUUID(),
         name: name.trim(),
-        trigger: { device: selectedKey.startsWith('Mouse') ? 'mouse' : 'keyboard', key: selectedKey },
+        trigger: { 
+          device: selectedKey?.startsWith('Mouse') ? 'mouse' : 'keyboard', 
+          key: selectedKey || 'UNASSIGNED' 
+        },
         mode: isRepeatEnabled ? 'repeat' : 'once',
         repeatCount: isRepeatEnabled ? (repeatCount > 0 ? repeatCount : 0) : undefined,
         actions
       };
       const result = await saveMacro(macro as any);
       if (result.success) {
+        // Redirection vers le dashboard comme demandé par l'utilisateur
         onBack();
+        setView('dashboard');
       } else {
         setError("Erreur lors de la sauvegarde");
       }
@@ -443,310 +411,6 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
       setIsSaving(false);
     }
   };
-
-  const renderContent = () => {
-    return (
-      <div className={`flex flex-col h-full overflow-hidden ${isLight ? 'bg-[#F8F9FA]' : 'bg-[#0f111a]'} text-white relative`}>
-        {/* Header simple avec back et titre */}
-        <div data-tauri-drag-region className={`h-24 flex-none flex items-center justify-between px-12 border-b ${isLight ? 'bg-white border-[#E9ECEF] shadow-sm' : 'bg-[#0f111a]/20 border-white/5'}`}>
-          <div className="flex items-center gap-8 no-drag">
-            <button onClick={onBack} className={`p-4 rounded-2xl transition-all ${isLight ? 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100' : 'bg-white/5 text-slate-500 hover:bg-white/10'}`}>
-              <ArrowLeft size={22} />
-            </button>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-3">
-                {isRenaming ? (
-                  <input 
-                    ref={nameInputRef}
-                    type="text" 
-                    value={name} 
-                    onChange={(e) => setName(e.target.value)}
-                    onBlur={() => setIsRenaming(false)}
-                    onKeyDown={(e) => e.key === 'Enter' && setIsRenaming(false)}
-                    className={`bg-white/5 border border-primary/30 rounded-lg px-2 text-2xl font-black uppercase tracking-tight outline-none focus:ring-1 focus:ring-primary/50 ${isLight ? 'text-slate-900' : 'text-white'}`}
-                  />
-                ) : (
-                  <h2 
-                    onClick={toggleRenaming}
-                    className={`text-2xl font-black uppercase tracking-tight cursor-pointer hover:text-primary transition-colors ${isLight ? 'text-slate-900' : 'text-white'}`}
-                  >
-                    {name || "Nouvelle Macro"}
-                  </h2>
-                )}
-                <div className="flex items-center gap-2 ml-4">
-                  <button 
-                    onClick={toggleRenaming}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                    title="Renommer"
-                  >
-                    <FileSearch size={16} />
-                  </button>
-                </div>
-              </div>
-              <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isLight ? 'text-slate-400' : 'opacity-40'}`}>
-                Séquence d'actions pour <span className="text-primary">{selectedKey}</span>
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-6 no-drag">
-            <div className="flex items-center gap-4 px-6 py-3 rounded-2xl border border-white/5 bg-white/5">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Délai d'activation</span>
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="number"
-                    value={globalDelay}
-                    onChange={(e) => setGlobalDelay(e.target.value)}
-                    className="w-12 bg-transparent border-none text-xs font-black text-primary outline-none text-center"
-                  />
-                  <span className="text-[10px] font-black uppercase opacity-30">ms</span>
-                </div>
-              </div>
-            </div>
-
-            <button 
-              onClick={handleSave}
-              disabled={isSaving || isRecording}
-              className="flex items-center gap-3 px-10 py-4 rounded-2xl bg-primary text-white font-black uppercase tracking-[0.2em] text-xs transition-all shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 disabled:opacity-50"
-            >
-              {isSaving ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Save size={16} />
-              )}
-              Sauvegarder
-            </button>
-          </div>
-        </div>
-        
-        <div className="flex-1 flex gap-8 p-8 overflow-hidden">
-          {/* Liste des actions - Verticale */}
-          <div 
-            ref={scrollRef}
-            className={`flex-1 flex flex-col gap-3 p-8 rounded-[32px] border overflow-y-auto custom-scrollbar ${
-              isLight ? 'bg-white border-slate-100 shadow-sm' : 'bg-[#0a0c14] border-white/5 shadow-inner'
-            }`}
-          >
-            {actions.length === 0 ? (
-              <div className={`flex-1 flex flex-col items-center justify-center gap-6 ${isLight ? 'text-slate-200' : 'opacity-10'}`}>
-                <div className="w-20 h-20 rounded-full border-2 border-dashed border-current flex items-center justify-center">
-                  <Play size={40} strokeWidth={1} />
-                </div>
-                <p className="text-sm font-black uppercase tracking-[0.3em]">Séquence vide - Enregistrez pour commencer</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {actions.map((action, index) => (
-                  <React.Fragment key={`${index}-${action.type}`}>
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className={`group relative flex items-center gap-4 px-6 py-4 rounded-2xl border transition-all ${
-                        isLight ? 'bg-slate-50 border-slate-100 shadow-sm' : 'bg-white/5 border-white/10'
-                      }`}
-                    >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isLight ? 'bg-white text-slate-400 shadow-sm border border-slate-100' : 'bg-white/5 text-slate-500'}`}>
-                        {getActionIcon(action.type)}
-                      </div>
-                      <div className="flex-1 flex items-center justify-between">
-                        <div className={`text-xs font-black uppercase tracking-widest ${isLight ? 'text-slate-600' : 'text-white/80'}`}>
-                          {getActionDetails(action)}
-                        </div>
-                        
-                        <div className="flex items-center gap-6">
-                          <button 
-                            onClick={() => setActions(prev => prev.filter((_, i) => i !== index))}
-                            className="p-2 rounded-lg text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
-                    
-                    {index < actions.length - 1 && (
-                      <div className="flex justify-center py-2">
-                        <motion.div 
-                          whileHover={{ scale: 1.05 }}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
-                            isLight ? 'bg-white border-slate-100 shadow-sm' : 'bg-[#1a1d23] border-white/5 shadow-lg'
-                          }`}
-                        >
-                          <Clock size={12} className="text-primary opacity-50" />
-                          <input 
-                            type="number"
-                            value={convertFromMs(action.delay_ms)}
-                            onChange={(e) => updateDelay(index, convertToMs(parseFloat(e.target.value) || 0).toString())}
-                            className="w-14 bg-transparent border-none text-[11px] font-black text-primary outline-none text-center p-0"
-                          />
-                          <span className="text-[9px] font-black uppercase opacity-30">{timeUnit}</span>
-                        </motion.div>
-                      </div>
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Panneau de contrôle latéral */}
-          <div className="w-80 flex flex-col gap-6">
-            {selectedKey?.startsWith('Mouse') && (
-              <div className={`flex items-center justify-center overflow-visible`}>
-                <div className="scale-[0.5] origin-center -my-24">
-                  <Mouse 
-                    selectedKey={selectedKey}
-                    onAction={(id) => setSelectedKey(id)}
-                    onDrop={() => {}}
-                    onDragOver={(e) => e.preventDefault()}
-                    theme={isLight ? 'light' : 'dark'}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className={`p-8 rounded-[32px] border flex flex-col gap-8 ${isLight ? 'bg-white border-slate-100 shadow-sm' : 'bg-[#0f111a] border-white/5'}`}>
-              <div className="flex flex-col gap-2">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 text-center">Mode d'exécution</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'once', label: 'Une fois' },
-                    { id: 'hold', label: 'Maintenir' },
-                    { id: 'toggle', label: 'Bascule' },
-                    { id: 'repeat', label: 'Répéter' },
-                  ].map(mode => (
-                    <button
-                      key={mode.id}
-                      onClick={() => {
-                        setExecutionMode(mode.id as any);
-                        if (mode.id !== 'repeat') {
-                          setIsRepeatEnabled(mode.id === 'toggle');
-                        }
-                      }}
-                      className={`relative px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all flex flex-col items-center justify-center gap-1 ${
-                        executionMode === mode.id 
-                          ? 'bg-primary border-primary text-white shadow-lg' 
-                          : isLight ? 'bg-slate-50 border-slate-100 text-slate-400' : 'bg-white/5 border-white/10 text-slate-500'
-                      }`}
-                    >
-                      <span>{mode.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <AnimatePresence>
-                {executionMode === 'repeat' && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex flex-col gap-3 p-4 rounded-2xl bg-white/5 border border-white/5">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Nombre de répétitions</span>
-                        <span className="text-primary font-black text-xs">{repeatCount}</span>
-                      </div>
-                      <input 
-                        type="range" 
-                        min="1" 
-                        max="99" 
-                        value={repeatCount} 
-                        onChange={(e) => setRepeatCount(parseInt(e.target.value))}
-                        className="w-full accent-primary h-1.5 rounded-full appearance-none bg-white/10" 
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="w-full h-px bg-white/5" />
-
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={toggleRecording}
-                className={`w-full flex items-center justify-center gap-4 py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-sm transition-all shadow-2xl ${
-                  isRecording 
-                    ? 'bg-red-500 text-white shadow-red-500/40 animate-pulse' 
-                    : 'bg-[#2A2D33] text-white shadow-black/20'
-                }`}
-              >
-                {isRecording ? (
-                  <>
-                    <Square size="20" fill="currentColor" />
-                    ARRÊTER
-                  </>
-                ) : (
-                  <>
-                    <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
-                    ENREGISTRER
-                  </>
-                )}
-              </motion.button>
-              
-              {isRecording && (
-                <p className="text-[9px] font-bold uppercase tracking-widest text-center opacity-30 leading-relaxed px-4">
-                  Toutes vos actions clavier et souris sont actuellement enregistrées.
-                </p>
-              )}
-
-              <button
-                onClick={handleDelete}
-                className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border
-                  ${isLight 
-                    ? 'bg-red-50 border-red-100 text-red-500 hover:bg-red-500 hover:text-white' 
-                    : 'bg-red-500/10 border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white shadow-[0_0_20px_rgba(239,68,68,0.2)]'
-                  }`}
-              >
-                Supprimer la macro
-              </button>
-            </div>
-
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  if (showKeyPicker) {
-    return (
-      <div className={`fixed inset-0 z-[200] flex flex-col transition-colors duration-500 ${isLight ? 'bg-slate-50' : 'bg-[#0f111a]'}`}>
-        <div className={`flex items-center justify-between p-6 border-b ${isLight ? 'bg-white border-slate-100' : 'bg-[#0f111a] border-white/5'}`}>
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setShowKeyPicker(false)}
-              className={`p-2 rounded-xl transition-all ${isLight ? 'hover:bg-slate-100 text-slate-400' : 'hover:bg-white/5 text-slate-500'}`}
-            >
-              <ArrowLeft size={24} />
-            </button>
-            <div className="flex flex-col">
-              <h2 className={`text-xl font-black uppercase tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Assigner une touche</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest opacity-30 italic">Cliquez sur une touche ou un bouton souris</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => setShowKeyPicker(false)}
-            className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-primary text-white font-black uppercase tracking-widest text-[10px] shadow-lg shadow-primary/20"
-          >
-            Terminer
-          </button>
-        </div>
-        
-        <div className="flex-1 flex items-center justify-center p-12 overflow-hidden">
-          <div className="scale-[0.8] origin-center">
-            <DeviceMapper 
-              selectedKey={selectedKey} 
-              onSelectKey={(id) => setSelectedKey(id)}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const getActionIcon = (type: string) => {
     switch (type) {
@@ -763,7 +427,7 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
 
   const getActionDetails = (action: Action) => {
     const layout = settings.keyboard_layout_type || 'AZERTY';
-    
+
     const getButtonName = (button: string) => {
       switch (button) {
         case 'left': return 'Gauche';
@@ -824,6 +488,273 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
       default:
         return null;
     }
+  };
+
+  const renderContent = () => {
+    return (
+      <div className={`flex flex-col h-full overflow-hidden ${isLight ? 'bg-[#F8F9FA]' : 'bg-[#0f111a]'} text-white relative`}>
+        {/* Header simple avec back et titre */}
+        <div data-tauri-drag-region className={`h-24 flex-none flex items-center justify-between px-12 border-b ${isLight ? 'bg-white border-[#E9ECEF] shadow-sm' : 'bg-[#0f111a]/20 border-white/5'}`}>
+          <div className="flex items-center gap-8 no-drag">
+            <button onClick={onBack} className={`p-4 rounded-2xl transition-all ${isLight ? 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100' : 'bg-white/5 text-slate-500 hover:bg-white/10'}`}>
+              <ArrowLeft size={22} />
+            </button>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-3">
+                {isRenaming ? (
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onBlur={() => setIsRenaming(false)}
+                    onKeyDown={(e) => e.key === 'Enter' && setIsRenaming(false)}
+                    className={`bg-white/5 border border-primary/30 rounded-lg px-2 text-2xl font-black uppercase tracking-tight outline-none focus:ring-1 focus:ring-primary/50 ${isLight ? 'text-slate-900' : 'text-white'}`}
+                  />
+                ) : (
+                  <h2
+                    onClick={toggleRenaming}
+                    className={`text-2xl font-black uppercase tracking-tight cursor-pointer hover:text-primary transition-colors ${isLight ? 'text-slate-900' : 'text-white'}`}
+                  >
+                    {name || "Nouvelle Macro"}
+                  </h2>
+                )}
+                <div className="flex items-center gap-2 ml-4">
+                  <button
+                    onClick={toggleRenaming}
+                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                    title="Renommer"
+                  >
+                    <FileSearch size={16} />
+                  </button>
+                </div>
+              </div>
+              <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isLight ? 'text-slate-400' : 'opacity-40'}`}>
+                Séquence d'actions pour <span className="text-primary">{selectedKey || "Non assigné"}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 no-drag">
+            <div className="flex items-center gap-4 px-6 py-3 rounded-2xl border border-white/5 bg-white/5">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Délai d'activation</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={globalDelay}
+                    onChange={(e) => setGlobalDelay(e.target.value)}
+                    className="w-12 bg-transparent border-none text-xs font-black text-primary outline-none text-center"
+                  />
+                  <span className="text-[10px] font-black uppercase opacity-30">ms</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSave}
+              disabled={isSaving || isRecording}
+              className="flex items-center gap-3 px-10 py-4 rounded-2xl bg-primary text-white font-black uppercase tracking-[0.2em] text-xs transition-all shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 disabled:opacity-50"
+            >
+              {isSaving ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Save size={16} />
+              )}
+              Sauvegarder
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 flex gap-8 p-8 overflow-hidden">
+          {/* Liste des actions - Verticale */}
+          <div
+            ref={scrollRef}
+            className={`flex-1 flex flex-col gap-3 p-8 rounded-[32px] border overflow-y-auto custom-scrollbar ${isLight ? 'bg-white border-slate-100 shadow-sm' : 'bg-[#0a0c14] border-white/5 shadow-inner'
+              }`}
+          >
+            {actions.length === 0 ? (
+              <div className={`flex-1 flex flex-col items-center justify-center gap-6 ${isLight ? 'text-slate-200' : 'opacity-10'}`}>
+                <div className="w-20 h-20 rounded-full border-2 border-dashed border-current flex items-center justify-center">
+                  <Play size={40} strokeWidth={1} />
+                </div>
+                <p className="text-sm font-black uppercase tracking-[0.3em]">Séquence vide - Enregistrez pour commencer</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {actions.map((action, index) => (
+                  <React.Fragment key={`${index}-${action.type}`}>
+                    <motion.div
+                      layout
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className={`group relative flex items-center gap-4 px-6 py-4 rounded-2xl border transition-all ${isLight ? 'bg-slate-50 border-slate-100 shadow-sm' : 'bg-white/5 border-white/10'
+                        }`}
+                    >
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isLight ? 'bg-white text-slate-400 shadow-sm border border-slate-100' : 'bg-white/5 text-slate-500'}`}>
+                        {getActionIcon(action.type)}
+                      </div>
+                      <div className="flex-1 flex items-center justify-between">
+                        <div className={`text-xs font-black uppercase tracking-widest ${isLight ? 'text-slate-600' : 'text-white/80'}`}>
+                          {getActionDetails(action)}
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                          <button
+                            onClick={() => setActions(prev => prev.filter((_, i) => i !== index))}
+                            className="p-2 rounded-lg text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+
+                    {index < actions.length - 1 && (
+                      <div className="flex justify-center py-2">
+                        <motion.div
+                          whileHover={{ scale: 1.05 }}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${isLight ? 'bg-white border-slate-100 shadow-sm' : 'bg-[#1a1d23] border-white/5 shadow-lg'
+                            }`}
+                        >
+                          <Clock size={12} className="text-primary opacity-50" />
+                          <input
+                            type="number"
+                            value={convertFromMs(action.delay_ms)}
+                            onChange={(e) => updateDelay(index, convertToMs(parseFloat(e.target.value) || 0).toString())}
+                            className="w-14 bg-transparent border-none text-[11px] font-black text-primary outline-none text-center p-0"
+                          />
+                          <span className="text-[9px] font-black uppercase opacity-30">{timeUnit}</span>
+                        </motion.div>
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Panneau de contrôle latéral */}
+          <div className="w-80 flex flex-col gap-6">
+            {selectedKey?.startsWith('Mouse') && (
+              <div className={`flex items-center justify-center overflow-visible`}>
+                <div className="scale-[0.5] origin-center -my-24">
+                  <Mouse
+                    selectedKey={selectedKey}
+                    onAction={(id) => setSelectedKey(id)}
+                    onDrop={() => { }}
+                    onDragOver={(e) => e.preventDefault()}
+                    theme={isLight ? 'light' : 'dark'}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className={`p-8 rounded-[32px] border flex flex-col gap-8 ${isLight ? 'bg-white border-slate-100 shadow-sm' : 'bg-[#0f111a] border-white/5'}`}>
+              <div className="flex flex-col gap-2">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 text-center">Mode d'exécution</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'once', label: 'Une fois' },
+                    { id: 'hold', label: 'Maintenir' },
+                    { id: 'toggle', label: 'Bascule' },
+                    { id: 'repeat', label: 'Répéter' },
+                  ].map(mode => (
+                    <button
+                      key={mode.id}
+                      onClick={() => {
+                        setExecutionMode(mode.id as any);
+                        if (mode.id !== 'repeat') {
+                          setIsRepeatEnabled(mode.id === 'toggle');
+                        }
+                      }}
+                      className={`relative px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all flex flex-col items-center justify-center gap-1 ${executionMode === mode.id
+                        ? 'bg-primary border-primary text-white shadow-lg'
+                        : isLight ? 'bg-slate-50 border-slate-100 text-slate-400' : 'bg-white/5 border-white/10 text-slate-500'
+                        }`}
+                    >
+                      <span>{mode.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {executionMode === 'repeat' && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex flex-col gap-3 p-4 rounded-2xl bg-white/5 border border-white/5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Nombre de répétitions</span>
+                        <span className="text-primary font-black text-xs">{repeatCount}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="99"
+                        value={repeatCount}
+                        onChange={(e) => setRepeatCount(parseInt(e.target.value))}
+                        className="w-full accent-primary h-1.5 rounded-full appearance-none bg-white/10"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="w-full h-px bg-white/5" />
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={toggleRecording}
+                className={`w-full flex items-center justify-center gap-4 py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-sm transition-all shadow-2xl ${isRecording
+                  ? 'bg-red-500 text-white shadow-red-500/40 animate-pulse'
+                  : 'bg-[#2A2D33] text-white shadow-black/20'
+                  }`}
+              >
+                {isRecording ? (
+                  <>
+                    <Square size="20" fill="currentColor" />
+                    ARRÊTER
+                  </>
+                ) : (
+                  <>
+                    <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
+                    ENREGISTRER
+                  </>
+                )}
+              </motion.button>
+
+              {isRecording && (
+                <p className="text-[9px] font-bold uppercase tracking-widest text-center opacity-30 leading-relaxed px-4">
+                  Toutes vos actions clavier et souris sont actuellement enregistrées.
+                </p>
+              )}
+
+              <button
+                onClick={async () => {
+                  if (window.confirm(`Voulez-vous vraiment supprimer la macro "${name}" ?`)) {
+                    await handleDelete();
+                  }
+                }}
+                className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border
+                  ${isLight
+                    ? 'bg-red-50 border-red-100 text-red-500 hover:bg-red-500 hover:text-white'
+                    : 'bg-red-500/10 border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white shadow-[0_0_20px_rgba(239,68,68,0.2)]'
+                  }`}
+              >
+                Supprimer la macro
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return renderContent();

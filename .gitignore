@@ -29,4 +29,7 @@ bin/
 obj/
 build_output*.txt
 check_output.txt
+
+# Tauri Signer
+.tauri-signer.key
 1

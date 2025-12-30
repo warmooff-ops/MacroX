@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use directories::ProjectDirs;
 use crate::models::{MacroConfig, AppSettings, Config, Profile};
 use base64::{Engine as _, engine::general_purpose};
 
@@ -194,11 +193,47 @@ pub fn save_macro(macro_config: &MacroConfig, profile: &str) -> Result<(), Strin
     Ok(())
 }
 
-pub fn delete_macro(name: &str, profile: &str) {
-    let safe_name = name.replace(|c: char| !c.is_alphanumeric(), "_");
-    let path = get_macros_dir(profile).join(format!("{}.json", safe_name));
+pub fn delete_macro(name: &str, profile: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("Le nom de la macro ne peut pas être vide".to_string());
+    }
+
+    let safe_name = name.chars()
+        .map(|c: char| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+    
+    let macros_dir = get_macros_dir(profile);
+    let path = macros_dir.join(format!("{}.json", safe_name));
+    
+    println!("Tentative de suppression de la macro : {} (fichier: {:?})", name, path);
+
     if path.exists() {
-        let _ = fs::remove_file(path);
+        fs::remove_file(&path).map_err(|e| format!("Erreur lors de la suppression du fichier {:?} : {}", path, e))?;
+        println!("Macro '{}' supprimée avec succès.", name);
+        Ok(())
+    } else {
+        // Si le fichier direct n'existe pas, essayons de trouver un fichier qui contient cet ID
+        // (au cas où le nom du fichier et le nom interne seraient désynchronisés)
+        println!("Fichier non trouvé par nom normalisé. Recherche par contenu...");
+        
+        if let Ok(entries) = fs::read_dir(&macros_dir) {
+            for entry in entries.flatten() {
+                let entry_path = entry.path();
+                if entry_path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    if let Ok(content) = fs::read_to_string(&entry_path) {
+                        if let Ok(macro_config) = serde_json::from_str::<MacroConfig>(&content) {
+                            if macro_config.name == name {
+                                fs::remove_file(&entry_path).map_err(|e| format!("Erreur lors de la suppression du fichier trouvé par contenu {:?} : {}", entry_path, e))?;
+                                println!("Macro '{}' trouvée par contenu et supprimée ({:?}).", name, entry_path);
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(format!("La macro '{}' n'a pas pu être trouvée (chemin tenté: {:?})", name, path))
     }
 }
 
