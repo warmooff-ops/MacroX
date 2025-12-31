@@ -63,21 +63,40 @@ pub async fn run_macro(config: MacroConfig) {
             execute_actions(config.actions, None, &layout).await;
         }
         ExecutionMode::Toggle => {
+            let delay = config.repeat_delay_ms.unwrap_or(10);
+            println!("🔄 [Engine] Macro Toggle: id={}, delay={}ms", id, delay);
             while crate::hook::ACTIVE_MACROS.lock().unwrap().contains(&id) {
                 execute_actions(config.actions.clone(), Some(&id), &layout).await;
-                sleep(Duration::from_millis(10)).await;
+                if delay > 0 {
+                    sleep(Duration::from_millis(delay)).await;
+                }
             }
+            println!("⏹ [Engine] Macro Toggle terminée: id={}", id);
         }
         ExecutionMode::Hold => {
+            let delay = config.repeat_delay_ms.unwrap_or(10);
+            println!("⏳ [Engine] Macro Hold: id={}, delay={}ms", id, delay);
             while crate::hook::ACTIVE_MACROS.lock().unwrap().contains(&id) {
                 execute_actions(config.actions.clone(), Some(&id), &layout).await;
-                sleep(Duration::from_millis(10)).await;
+                if delay > 0 {
+                    sleep(Duration::from_millis(delay)).await;
+                }
             }
+            println!("⏹ [Engine] Macro Hold terminée: id={}", id);
         }
         ExecutionMode::Repeat => {
             let count = config.repeat_count.unwrap_or(1);
-            for _ in 0..count {
+            let delay = config.repeat_delay_ms.unwrap_or(0);
+            println!("🔁 [Engine] Macro Repeat: id={}, count={}, delay={}ms", id, count, delay);
+            for i in 0..count {
+                if !crate::hook::ACTIVE_MACROS.lock().unwrap().contains(&id) {
+                    println!("⏹ [Engine] Macro Repeat annulée: id={}", id);
+                    break;
+                }
                 execute_actions(config.actions.clone(), None, &layout).await;
+                if delay > 0 && i < count - 1 {
+                    sleep(Duration::from_millis(delay)).await;
+                }
             }
         }
     }

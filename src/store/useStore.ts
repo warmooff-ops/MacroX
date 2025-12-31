@@ -21,6 +21,7 @@ interface MacroConfig {
   };
   mode: 'once' | 'hold' | 'toggle' | 'repeat';
   repeatCount?: number;
+  repeatDelayMs?: number;
   actions: Action[];
 }
 
@@ -62,7 +63,7 @@ interface AppState {
   activeProfile: string;
   isSidebarOpen: boolean;
   notifications: Toast[];
-  
+
   // Actions
   setView: (view: 'dashboard' | 'settings' | 'list') => void;
   setSelectedKey: (key: string | null) => void;
@@ -71,11 +72,11 @@ interface AppState {
   setIsSidebarOpen: (isOpen: boolean) => void;
   addNotification: (message: string, type: 'success' | 'error' | 'info') => void;
   removeNotification: (id: string) => void;
-  
+
   // Async Backend Actions
   loadMacros: () => Promise<void>;
   saveMacro: (macro: MacroConfig) => Promise<{ success: boolean; error?: string }>;
-  deleteMacro: (name: string) => Promise<void>;
+  deleteMacro: (id: string) => Promise<{ success: boolean; error?: string }>;
   exportMacro: (macro: MacroConfig) => Promise<string>;
   importMacro: (base64: string) => Promise<void>;
   loadConfig: () => Promise<void>;
@@ -85,7 +86,7 @@ interface AppState {
   createProfile: (name: string) => Promise<void>;
   deleteProfile: (name: string) => Promise<void>;
   bindMacroToKey: (macroId: string, keyId: string) => Promise<{ success: boolean; error?: string }>;
-  
+
   // Helpers
   t: (key: string) => string;
 }
@@ -95,8 +96,8 @@ export const useStore = create<AppState>((set, get) => ({
   selectedKey: null,
   macros: [],
   profiles: [],
-  settings: { 
-    language: 'fr', 
+  settings: {
+    language: 'fr',
     auto_start: false,
     theme: 'dark',
     layout: 'AZERTY',
@@ -117,7 +118,10 @@ export const useStore = create<AppState>((set, get) => ({
   notifications: [],
 
   setView: (view) => set({ view }),
-  setSelectedKey: (selectedKey) => set({ selectedKey }),
+  setSelectedKey: (selectedKey) => {
+    const normalized = selectedKey ? normalizeKeyId(selectedKey) : null;
+    set({ selectedKey: normalized });
+  },
   setProfile: async (activeProfile) => {
     set({ activeProfile });
     await get().updateSettings({ active_profile: activeProfile });
@@ -131,7 +135,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setMacros: (macros) => set({ macros }),
   setIsSidebarOpen: (isSidebarOpen) => set({ isSidebarOpen }),
-  
+
   addNotification: (message, type) => {
     const id = Math.random().toString(36).substring(2, 9);
     set((state) => ({
@@ -145,20 +149,36 @@ export const useStore = create<AppState>((set, get) => ({
       notifications: state.notifications.filter((n) => n.id !== id)
     }));
   },
-  
+
   loadMacros: async () => {
     try {
+      console.log("🔍 [useStore] Chargement des macros...");
       const macros = await invoke<MacroConfig[]>("get_all_macros");
-      const denormalizedMacros = macros.map(m => ({
-        ...m,
-        trigger: {
-          ...m.trigger,
-          key: denormalizeKeyId(m.trigger.key)
-        }
-      }));
+      console.log(`📥 [useStore] ${macros.length} macros reçues du backend`);
+
+      // Verification explicite du chargement
+      if (macros.length > 0) {
+        console.log("📝 Exemple de macro:", JSON.stringify(macros[0], null, 2));
+      } else {
+        console.warn("⚠️ Aucune macro chargée. Vérifiez l'existence des fichiers.");
+      }
+
+      const denormalizedMacros = macros.map(m => {
+        const normalized = {
+          ...m,
+          trigger: {
+            ...m.trigger,
+            key: normalizeKeyId(m.trigger.key)
+          }
+        };
+        // console.log(`  - Macro: ${m.name}, Key: ${m.trigger.key} -> ${normalized.trigger.key}`);
+        return normalized;
+      });
+
       set({ macros: denormalizedMacros });
+      console.log("✅ [useStore] Macros mises à jour dans le store Zustand");
     } catch (error) {
-      console.error("Failed to load macros:", error);
+      console.error("❌ [useStore] Failed to load macros:", error);
     }
   },
 
@@ -184,13 +204,11 @@ export const useStore = create<AppState>((set, get) => ({
         }
       };
 
-      await invoke("save_macro", { 
-        macroConfig: normalizedMacro 
+      console.log("🚀 [useStore] Envoi à save_macro:", JSON.stringify(normalizedMacro, null, 2));
+
+      await invoke("save_macro", {
+        macroConfig: normalizedMacro
       });
-      
-      // Sauvegarder aussi le profil actuel sur le disque
-      const currentProfile = get().activeProfile;
-      await invoke("save_profile_to_disk", { profile: { name: currentProfile } });
 
       await get().loadMacros();
       get().addNotification('Macro sauvegardée !', 'success');
@@ -202,15 +220,15 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  deleteMacro: async (name) => {
+  deleteMacro: async (id: string) => {
     try {
-      await invoke("delete_macro", { name });
+      console.log(`🗑️ [useStore] Suppression de la macro: ${id}`);
+      await invoke("delete_macro", { id });
       await get().loadMacros();
-      get().addNotification(`Macro "${name}" supprimée`, 'success');
+      return { success: true };
     } catch (error) {
-      console.error("Failed to delete macro:", error);
-      const errorMessage = typeof error === 'string' ? error : 'Erreur lors de la suppression';
-      get().addNotification(errorMessage, 'error');
+      console.error("❌ [useStore] Failed to delete macro:", error);
+      return { success: false, error: String(error) };
     }
   },
 
@@ -231,7 +249,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const config = await invoke<any>("get_config");
       if (config && config.settings) {
-        set({ 
+        set({
           settings: { ...get().settings, ...config.settings },
           activeProfile: config.settings.active_profile || 'Default'
         });

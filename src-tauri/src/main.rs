@@ -58,6 +58,11 @@ fn start_mouse_capture() {
 }
 
 #[tauri::command]
+fn stop_mouse_capture() {
+    hook::set_capturing(false);
+}
+
+#[tauri::command]
 fn get_mouse_position() -> (i32, i32) {
     use enigo::MouseControllable;
     let enigo = enigo::Enigo::new();
@@ -87,9 +92,18 @@ fn get_active_app() -> Result<String, String> {
             Ok(name)
         }
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
-        Ok("Non-Windows OS".to_string())
+        // Essai avec xdotool
+        if let Ok(output) = Command::new("xdotool").args(&["getwindowfocus", "getwindowname"]).output() {
+             if output.status.success() {
+                let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !name.is_empty() {
+                    return Ok(name);
+                }
+             }
+        }
+        Ok("Linux Application".to_string())
     }
 }
 
@@ -116,9 +130,10 @@ fn get_active_apps() -> Result<Vec<String>, String> {
         
         Ok(apps)
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
-        Ok(vec!["Non-Windows OS".to_string()])
+        // Placeholder pour Linux. Idéalement utiliser wmctrl -l
+        Ok(vec!["Linux App 1".to_string(), "Linux App 2".to_string()])
     }
 }
 
@@ -161,10 +176,10 @@ async fn load_macros_robust() -> Result<Vec<MacroConfig>, String> {
 }
 
 #[tauri::command]
-async fn delete_macro(name: String) -> Result<(), String> {
+async fn delete_macro(id: String) -> Result<(), String> {
     let config = load_config();
     let profile = config.settings.active_profile;
-    del_macro(&name, &profile)?;
+    del_macro(&id, &profile)?;
     reload_macros();
     Ok(())
 }
@@ -382,6 +397,7 @@ fn main() {
             init_folders,
             init_custom_folder,
             start_mouse_capture,
+            stop_mouse_capture,
             get_mouse_position,
             open_macros_folder,
             open_profiles_folder,

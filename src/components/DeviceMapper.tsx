@@ -189,7 +189,9 @@ const DeviceMapper: React.FC<DeviceMapperProps> = ({
     if (macros && Array.isArray(macros)) {
       macros.forEach((m: any) => {
         if (m.trigger && m.trigger.key) {
-          map[m.trigger.key] = m;
+          // Normaliser la clé pour le mapping (ex: "KeyP" -> "P")
+          const normalizedKey = normalizeKeyId(m.trigger.key);
+          map[normalizedKey] = m;
         }
       });
     }
@@ -199,11 +201,12 @@ const DeviceMapper: React.FC<DeviceMapperProps> = ({
   // Use store values if available, otherwise fallback to props
   const currentSelectedKey = selectedKey ?? propSelectedKey;
   const handleSelectKey = (keyId: string) => {
-    setSelectedKey(keyId);
-    if (propOnSelectKey) propOnSelectKey(keyId);
+    const normalizedId = normalizeKeyId(keyId);
+    setSelectedKey(normalizedId);
+    if (propOnSelectKey) propOnSelectKey(normalizedId);
     
     // Dispatch custom event for MacroEditor if in picker mode
-    window.dispatchEvent(new CustomEvent('macro-key-selected', { detail: { key: keyId } }));
+    window.dispatchEvent(new CustomEvent('macro-key-selected', { detail: { key: normalizedId } }));
   };
   const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -225,9 +228,10 @@ const DeviceMapper: React.FC<DeviceMapperProps> = ({
   };
 
   const renderKey = (key: KeyInfo) => {
-    const isSelected = currentSelectedKey === key.id;
-    const isActive = activeTriggers.includes(key.id);
-    const hasMacro = !!macrosMap[key.id];
+    const normalizedId = normalizeKeyId(key.id);
+    const isSelected = currentSelectedKey === normalizedId;
+    const isActive = activeTriggers.includes(normalizedId);
+    const hasMacro = !!macrosMap[normalizedId];
     const label = key.id === 'Space' ? '' : getDisplayLabel(key.id, key.label);
 
     const keyWidth = calculateWidth(key.width);
@@ -240,13 +244,20 @@ const DeviceMapper: React.FC<DeviceMapperProps> = ({
       return name.length > limit ? name.substring(0, limit - 2) + ".." : name;
     };
 
-    const macroName = hasMacro ? truncateName(macrosMap[key.id].name, 6) : null;
+    const macroName = hasMacro ? truncateName(macrosMap[normalizedId].name, 6) : null;
 
     const getSelectedStyles = () => {
-      if (!isSelected && !hasMacro) return '';
-      return isLight 
-        ? 'border-primary bg-primary/10 shadow-[0_0_15px_rgba(139,92,246,0.3)]' 
-        : 'border-primary bg-primary/20 shadow-[0_0_25px_rgba(139,92,246,0.5)]';
+      if (isSelected) {
+        return isLight 
+          ? 'border-primary bg-primary/20 shadow-[0_0_15px_rgba(139,92,246,0.4)] z-20' 
+          : 'border-primary bg-primary/30 shadow-[0_0_25px_rgba(139,92,246,0.6)] z-20';
+      }
+      if (hasMacro) {
+        return isLight
+          ? 'border-primary/40 bg-primary/5 shadow-sm'
+          : 'border-primary/40 bg-primary/10 shadow-[0_0_15px_rgba(139,92,246,0.2)]';
+      }
+      return '';
     };
 
     if (key.id === 'Enter') return null; // Handled in renderBlock
@@ -367,9 +378,12 @@ const DeviceMapper: React.FC<DeviceMapperProps> = ({
         `}
       >
         {macroName && (
-          <span className="text-[7px] text-primary absolute top-1.5 left-1/2 -translate-x-1/2 uppercase tracking-tighter opacity-80 whitespace-nowrap overflow-hidden truncate w-[90%] text-center">
+          <span className="text-[7px] text-primary absolute top-1.5 left-1/2 -translate-x-1/2 uppercase tracking-tighter opacity-80 whitespace-nowrap overflow-hidden truncate w-[90%] text-center font-black">
             {macroName}
           </span>
+        )}
+        {hasMacro && (
+          <div className="absolute bottom-1.5 right-1.5 w-1 h-1 rounded-full bg-primary" />
         )}
         <span className={`relative z-10 ${macroName ? 'mt-2' : ''}`}>{label}</span>
       </motion.button>
@@ -440,8 +454,14 @@ const DeviceMapper: React.FC<DeviceMapperProps> = ({
             >
               {keysInRow.map(key => {
                 if (key.id === 'Enter') {
-                  const isSelected = currentSelectedKey === 'Enter';
-                  const hasMacro = !!macrosMap['Enter'];
+                  const normalizedId = normalizeKeyId(key.id);
+                  const isSelected = currentSelectedKey === normalizedId;
+                  const hasMacro = !!macrosMap[normalizedId];
+                  const truncateName = (name: string, limit: number = 8) => {
+                    if (!name) return "";
+                    return name.length > limit ? name.substring(0, limit - 2) + ".." : name;
+                  };
+                  const macroName = hasMacro ? truncateName(macrosMap[normalizedId].name, 6) : null;
                   // ISO Enter: 
                   // Row 2: width 1.5 (starts at 13.5)
                   // Row 3: width 2.25 (starts at 12.75)
@@ -462,25 +482,33 @@ const DeviceMapper: React.FC<DeviceMapperProps> = ({
                         onDrop={(e) => onDrop?.(e, 'Enter')}
                         className={`
                           absolute right-0 top-0 z-20
-                          rounded-xl border transition-all duration-300 flex items-center justify-center
-                          ${isSelected || hasMacro 
+                          rounded-xl border transition-all duration-300 flex flex-col items-center justify-center gap-1
+                          ${isSelected 
                             ? isLight 
-                              ? 'border-primary bg-primary/10 shadow-[0_0_15px_rgba(139,92,246,0.3)]' 
-                              : 'border-primary bg-primary/20 shadow-[0_0_25px_rgba(139,92,246,0.5)]'
-                            : isLight ? 'bg-white border-[#E9ECEF]' : 'bg-[#12141a] border-white/5'}
+                              ? 'border-primary bg-primary/20 shadow-[0_0_15px_rgba(139,92,246,0.4)]' 
+                              : 'border-primary bg-primary/30 shadow-[0_0_25px_rgba(139,92,246,0.6)]'
+                            : hasMacro
+                              ? isLight
+                                ? 'border-primary/40 bg-primary/5 shadow-sm'
+                                : 'border-primary/40 bg-primary/10 shadow-[0_0_15px_rgba(139,92,246,0.2)]'
+                              : isLight ? 'bg-white border-[#E9ECEF]' : 'bg-[#12141a] border-white/5'}
                         `}
                         style={{
                           width: `${enterWidth}px`,
                           height: `${enterHeight}px`,
                           marginTop: '0px',
-                          // ISO Shape: Total 1.5U. 
-                          // Top part: 1.5U (0% to 100%)
-                          // Bottom part: 1.25U (starts at 0.25U from left of 1.5U)
-                          // 0.25 / 1.5 = 16.66%
-                          clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 16.66% 100%, 16.66% 50%, 0% 50%)'
+                          clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 16.66% 100%, 16.66% 47.82%, 0% 47.82%)'
                         }}
                       >
-                        <span className="text-[14px] font-black opacity-40">↵</span>
+                        {macroName && (
+                          <span className="text-[7px] text-primary absolute top-2 left-1/2 -translate-x-1/2 uppercase tracking-tighter opacity-80 whitespace-nowrap overflow-hidden font-black">
+                            {macroName}
+                          </span>
+                        )}
+                        {hasMacro && (
+                          <div className="absolute bottom-1.5 right-1.5 w-1 h-1 rounded-full bg-primary" />
+                        )}
+                        <span className="relative z-10 mt-4">Enter</span>
                       </motion.button>
                     </div>
                   );

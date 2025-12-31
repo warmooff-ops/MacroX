@@ -35,6 +35,7 @@ pub struct MacroConfig {
     pub trigger: Trigger,
     pub mode: ExecutionMode,
     pub repeat_count: Option<u32>,
+    pub repeat_delay_ms: Option<u64>,
     pub actions: Vec<Action>,
 }
 

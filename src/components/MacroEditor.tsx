@@ -37,11 +37,12 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [executionMode, setExecutionMode] = useState<'once' | 'hold' | 'toggle' | 'repeat'>(initialMacro?.mode || 'once');
   const [repeatCount, setRepeatCount] = useState(initialMacro?.repeatCount || 1);
+  const [repeatDelay, setRepeatDelay] = useState(initialMacro?.repeatDelayMs || 50);
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(initialMacro?.mode === 'repeat' || initialMacro?.mode === 'toggle');
   const [actions, setActions] = useState<Action[]>(initialMacro?.actions || []);
   const [selectedActionIndex, setSelectedActionIndex] = useState<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false);
+  const [isFCapturing, setIsFCapturing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [globalDelay, setGlobalDelay] = useState<string>('50');
   const [msDuration, setMsDuration] = useState<string>('50');
@@ -61,81 +62,119 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
     if (macros && Array.isArray(macros)) {
       macros.forEach((m: any) => {
         if (m.trigger && m.trigger.key) {
-          map[m.trigger.key] = m;
+          const normalizedKey = normalizeKeyId(m.trigger.key);
+          map[normalizedKey] = m;
         }
       });
     }
     return map;
   }, [macros]);
 
-  // Sync with selectedKey or initialMacro
+  // Sync with store data ONLY on mount or when initialMacro changes
   useEffect(() => {
-    if (selectedKey) {
-      const existingMacro = macrosMap[selectedKey];
-      if (existingMacro) {
-        setName(existingMacro.name);
-        setExecutionMode(existingMacro.mode || 'once');
-        setRepeatCount(existingMacro.repeatCount || 1);
-        setActions(existingMacro.actions || []);
-      } else {
-        setName(`Macro ${selectedKey}`);
-        setExecutionMode('once');
-        setRepeatCount(1);
-        setActions([]);
+     if (initialMacro) {
+       console.log("📥 [MacroEditor] Initialisation avec la macro:", JSON.stringify(initialMacro, null, 2));
+       setName(initialMacro.name || '');
+      setExecutionMode(initialMacro.mode || 'once');
+      setRepeatCount(initialMacro.repeatCount || 1);
+      setRepeatDelay(initialMacro.repeatDelayMs || 50);
+      setActions(initialMacro.actions || []);
+    } else if (selectedKey) {
+      console.log("🆕 Création d'une nouvelle macro pour la touche:", selectedKey);
+      setName(`Macro ${selectedKey}`);
+      setExecutionMode('once');
+      setRepeatCount(1);
+      setActions([]);
+    }
+  }, [initialMacro?.id]); // Ne réagir qu'au changement d'ID de la macro initiale
+
+  // Handle key change (only when selectedKey actually changes to a DIFFERENT key AND we are not editing an existing macro)
+  const lastSelectedKeyRef = useRef(selectedKey);
+  useEffect(() => {
+    if (selectedKey && selectedKey !== lastSelectedKeyRef.current) {
+      const normalizedSelected = normalizeKeyId(selectedKey);
+      lastSelectedKeyRef.current = normalizedSelected;
+      
+      // Si on n'est pas déjà en train d'éditer une macro existante, on peut charger celle de la touche
+      if (!initialMacro) {
+        const existingMacro = macrosMap[normalizedSelected];
+        if (existingMacro) {
+          console.log("⌨️ Touche changée : chargement de la macro sur cette touche", normalizedSelected);
+          setName(existingMacro.name);
+          setExecutionMode(existingMacro.mode || 'once');
+          setRepeatCount(existingMacro.repeatCount || 1);
+          setRepeatDelay(existingMacro.repeatDelayMs || 50);
+          setActions(existingMacro.actions || []);
+        } else {
+          setName(`Macro ${normalizedSelected}`);
+          setExecutionMode('once');
+          setRepeatCount(1);
+          setRepeatDelay(50);
+          setActions([]);
+        }
       }
     }
-  }, [selectedKey, macrosMap]);
+  }, [selectedKey, macrosMap, initialMacro]);
 
   // Capture position logic
   useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    let isActive = true;
+
     const setupPositionListener = async () => {
+      console.log("👂 En attente de position-captured...");
       const unlisten = await listen<[number, number]>('position-captured', (event) => {
+        if (!isActive) return;
+        
         const [x, y] = event.payload;
-        const newAction: Action = {
+        console.log("📍 Position reçue dans le frontend:", x, y);
+        
+        const moveAction: Action = {
           type: 'mouse_move',
           x,
           y,
           delay_ms: parseInt(globalDelay) || 50
         };
-        setActions(prev => [...prev, newAction]);
-        setIsCapturing(false);
+        
+        const clickAction: Action = {
+          type: 'mouse_click',
+          button: 'Left',
+          delay_ms: 10,
+          duration_ms: 50
+        };
+
+        setActions(prev => [...prev, moveAction, clickAction]);
+        setIsFCapturing(false);
       });
-      return unlisten;
-    };
 
-    const unlistenPromise = setupPositionListener();
-    return () => {
-      unlistenPromise.then(f => f());
-    };
-  }, [globalDelay]);
-
-  // F key capture
-  useEffect(() => {
-    const handleCaptureKey = async (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'f' && isCapturing) {
-        e.preventDefault();
-        try {
-          const pos = await invoke<[number, number]>('get_mouse_position');
-          if (pos) {
-            const [x, y] = pos;
-            const newAction: Action = {
-              type: 'mouse_move',
-              x,
-              y,
-              delay_ms: parseInt(globalDelay) || 50
-            };
-            setActions(prev => [...prev, newAction]);
-            setIsCapturing(false);
-          }
-        } catch (err) {
-          console.error("Erreur capture F:", err);
-        }
+      if (isActive) {
+        unlistenFn = unlisten;
+      } else {
+        unlisten();
       }
     };
 
-    window.addEventListener('keydown', handleCaptureKey);
-    return () => window.removeEventListener('keydown', handleCaptureKey);
-  }, [isCapturing, globalDelay]);
+    if (isFCapturing) {
+      console.log("🎯 Activation de la capture...");
+      invoke('start_mouse_capture').catch(err => {
+        console.error("Erreur lors de l'activation de la capture:", err);
+        setIsFCapturing(false);
+      });
+      setupPositionListener();
+    }
+
+    return () => {
+      isActive = false;
+      if (unlistenFn) {
+        console.log("🛑 Nettoyage de l'écouteur de capture");
+        unlistenFn();
+      }
+      if (isFCapturing) {
+        // On demande au backend d'arrêter la capture si on quitte ou désactive
+        invoke('stop_mouse_capture').catch(() => {});
+      }
+    };
+  }, [isFCapturing, globalDelay]);
 
   // Global events
   useEffect(() => {
@@ -165,43 +204,17 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
       let lastTime = Date.now();
 
       const handleGlobalKeyDown = (event: KeyboardEvent) => {
+        // Empêcher d'enregistrer les touches si on interagit avec l'interface de l'éditeur
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
         if (event.code !== 'F12' && event.code !== 'F11') event.preventDefault();
-        const currentTime = Date.now();
-        const delay = currentTime - lastTime;
-        lastTime = currentTime;
-
-        // DEBUG: Afficher ce que le système retourne
-        console.log('🔍 DEBUG - event.code:', event.code, '| event.key:', event.key);
-
-        // Utiliser event.key (caractère réel selon la disposition du système)
-        let keyValue = event.key.toUpperCase();
-
-        // Gérer les touches spéciales
-        if (event.code === 'Enter') keyValue = 'ENTER';
-        if (event.code === 'Backspace') keyValue = 'BACKSPACE';
-        if (event.code === 'Tab') keyValue = 'TAB';
-        if (event.code === 'Escape') keyValue = 'ESC';
-        if (event.code === 'Space') keyValue = 'SPACE';
-
-        // Pour les touches de contrôle
-        if (event.code.startsWith('Control')) keyValue = 'CTRL';
-        if (event.code.startsWith('Shift')) keyValue = 'SHIFT';
-        if (event.code.startsWith('Alt')) keyValue = event.code === 'AltRight' ? 'ALTGR' : 'ALT';
-        if (event.code.startsWith('Meta')) keyValue = 'WIN';
-
-        console.log('✅ Valeur enregistrée:', keyValue);
-
-        setActions(prev => [...prev, { type: 'key_down', value: keyValue, delay_ms: delay > 0 ? delay : 50 }]);
-      };
-
-      const handleGlobalKeyUp = (event: KeyboardEvent) => {
-        if (event.code !== 'F12' && event.code !== 'F11') event.preventDefault();
-
-        // Empêcher d'ajouter le clic sur "Stop Recording" à la macro
+        
+        // Empêcher d'ajouter les touches d'activation du bouton Stop
         if (isRecording && (event.code === 'Enter' || event.code === 'Space')) {
-          // Si on est en train de cliquer sur le bouton arrêter via clavier
           const activeEl = document.activeElement;
-          if (activeEl && activeEl.textContent?.includes('Arrêter')) {
+          if (activeEl && activeEl.hasAttribute('data-ignore-record')) {
+            console.log("⌨️ Touche ignorée (focus sur bouton interface):", event.code);
             return;
           }
         }
@@ -210,61 +223,84 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
         const delay = currentTime - lastTime;
         lastTime = currentTime;
 
-        // Utiliser event.key (caractère réel selon la disposition du système)
         let keyValue = event.key.toUpperCase();
-
-        // Gérer les touches spéciales
         if (event.code === 'Enter') keyValue = 'ENTER';
         if (event.code === 'Backspace') keyValue = 'BACKSPACE';
         if (event.code === 'Tab') keyValue = 'TAB';
         if (event.code === 'Escape') keyValue = 'ESC';
         if (event.code === 'Space') keyValue = 'SPACE';
 
-        // Pour les touches de contrôle
         if (event.code.startsWith('Control')) keyValue = 'CTRL';
         if (event.code.startsWith('Shift')) keyValue = 'SHIFT';
         if (event.code.startsWith('Alt')) keyValue = event.code === 'AltRight' ? 'ALTGR' : 'ALT';
         if (event.code.startsWith('Meta')) keyValue = 'WIN';
 
+        console.log("✅ Action enregistrée: key_down", keyValue);
+        setActions(prev => [...prev, { type: 'key_down', value: keyValue, delay_ms: delay > 0 ? delay : 50 }]);
+      };
+
+      const handleGlobalKeyUp = (event: KeyboardEvent) => {
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+        if (event.code !== 'F12' && event.code !== 'F11') event.preventDefault();
+
+        if (isRecording && (event.code === 'Enter' || event.code === 'Space')) {
+          const activeEl = document.activeElement;
+          if (activeEl && activeEl.hasAttribute('data-ignore-record')) {
+            return;
+          }
+        }
+
+        const currentTime = Date.now();
+        const delay = currentTime - lastTime;
+        lastTime = currentTime;
+
+        let keyValue = event.key.toUpperCase();
+        if (event.code === 'Enter') keyValue = 'ENTER';
+        if (event.code === 'Backspace') keyValue = 'BACKSPACE';
+        if (event.code === 'Tab') keyValue = 'TAB';
+        if (event.code === 'Escape') keyValue = 'ESC';
+        if (event.code === 'Space') keyValue = 'SPACE';
+
+        if (event.code.startsWith('Control')) keyValue = 'CTRL';
+        if (event.code.startsWith('Shift')) keyValue = 'SHIFT';
+        if (event.code.startsWith('Alt')) keyValue = event.code === 'AltRight' ? 'ALTGR' : 'ALT';
+        if (event.code.startsWith('Meta')) keyValue = 'WIN';
+
+        console.log("✅ Action enregistrée: key_up", keyValue);
         setActions(prev => [...prev, { type: 'key_up', value: keyValue, delay_ms: delay > 0 ? delay : 50 }]);
       };
 
       const handleGlobalMouseDown = (event: MouseEvent) => {
-        // Empêcher d'ajouter le clic sur le bouton "Arrêter" à la macro
         const target = event.target as HTMLElement;
-        if (target && (target.closest('button')?.textContent?.includes('Arrêter') || target.textContent?.includes('Arrêter'))) {
-          return;
-        }
+        console.log("🖱 MouseDown détecté. Target:", target.tagName, "Ignore record:", !!target.closest('[data-ignore-record]'));
+        if (target.closest('[data-ignore-record]')) return;
 
         const currentTime = Date.now();
         const delay = currentTime - lastTime;
         lastTime = currentTime;
         const buttons = ['left', 'middle', 'right', 'back', 'forward'];
         const buttonName = buttons[event.button] || 'left';
-
-        // Gérer le bouton central MS
         const finalButton = event.button === 1 ? 'middle' : buttonName;
 
-        setActions(prev => [...prev, { type: 'mouse_down', button: finalButton, delay_ms: 0 }]);
+        console.log("✅ Action enregistrée: mouse_down", finalButton);
+        setActions(prev => [...prev, { type: 'mouse_down', button: finalButton, delay_ms: delay > 0 ? delay : 50 }]);
       };
 
       const handleGlobalMouseUp = (event: MouseEvent) => {
-        // Empêcher d'ajouter le clic sur le bouton "Arrêter" à la macro
         const target = event.target as HTMLElement;
-        if (target && (target.closest('button')?.textContent?.includes('Arrêter') || target.textContent?.includes('Arrêter'))) {
-          return;
-        }
+        if (target.closest('[data-ignore-record]')) return;
 
         const currentTime = Date.now();
         const delay = currentTime - lastTime;
         lastTime = currentTime;
         const buttons = ['left', 'middle', 'right', 'back', 'forward'];
         const buttonName = buttons[event.button] || 'left';
-
-        // Gérer le bouton central MS
         const finalButton = event.button === 1 ? 'middle' : buttonName;
 
-        setActions(prev => [...prev, { type: 'mouse_up', button: finalButton, delay_ms: 0 }]);
+        console.log("✅ Action enregistrée: mouse_up", finalButton);
+        setActions(prev => [...prev, { type: 'mouse_up', button: finalButton, delay_ms: delay > 0 ? delay : 50 }]);
       };
 
       window.addEventListener('keydown', handleGlobalKeyDown, true);
@@ -313,12 +349,21 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
   };
 
   const handleDelete = async () => {
-    if (!name || !confirm(`Supprimer la macro "${name}" ?`)) return;
-    try {
-      await deleteMacro(name);
-      onBack();
-    } catch (err) {
-      setError("Erreur lors de la suppression");
+    if (!initialMacro?.id) return;
+
+    if (confirm(`Êtes-vous sûr de vouloir supprimer la macro "${initialMacro.name}" ?`)) {
+      try {
+        const result = await deleteMacro(initialMacro.id);
+        if (result.success) {
+          onBack();
+          setView('dashboard');
+        } else {
+          setError(result.error || "Erreur lors de la suppression");
+        }
+      } catch (error) {
+        console.error("Erreur lors de la suppression:", error);
+        setError("Erreur lors de la suppression");
+      }
     }
   };
 
@@ -344,43 +389,49 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
   };
 
   const toggleRecording = () => {
+    console.log("🎬 toggleRecording appelé. État actuel isRecording:", isRecording);
     if (isRecording) {
       setIsRecording(false);
+      console.log("🛑 Arrêt de l'enregistrement");
 
-      // Nettoyage agressif pour empêcher d'ajouter le clic sur "Stop Recording" à la macro
+      // Nettoyage pour empêcher d'ajouter le clic sur le bouton "ARRÊTER" à la macro
       setActions(prev => {
-        if (prev.length > 0) {
-          // On identifie les actions de clic (down/up) à la fin de la séquence
-          let newActions = [...prev];
-          let removedCount = 0;
-
-          // On retire les dernières actions si ce sont des clics (généralement mouse_down + mouse_up)
-          // On recule depuis la fin
-          for (let i = newActions.length - 1; i >= 0; i--) {
-            const action = newActions[i];
-            if (action.type === 'mouse_up' || action.type === 'mouse_down' || action.type === 'mouse_click') {
-              newActions.pop();
-              removedCount++;
-              // On s'arrête après avoir retiré le couple down/up (2 actions) ou un clic complet
-              if (removedCount >= 2) break;
-            } else {
-              // Si on tombe sur autre chose qu'un clic (ex: touche clavier), on s'arrête
-              break;
-            }
+        if (prev.length === 0) return prev;
+        
+        let newActions = [...prev];
+        // On retire les dernières actions si ce sont des clics sur l'interface
+        // (généralement mouse_down + mouse_up)
+        let count = 0;
+        while (newActions.length > 0 && count < 2) {
+          const last = newActions[newActions.length - 1];
+          if (last.type === 'mouse_up' || last.type === 'mouse_down') {
+            newActions.pop();
+            count++;
+          } else {
+            break;
           }
-          return newActions;
         }
-        return prev;
+        return newActions;
       });
     } else {
+      console.log("⏺ Démarrage de l'enregistrement");
       setActions([]);
-      startTimeRef.current = Date.now();
       setIsRecording(true);
     }
   };
 
   const handleSave = async () => {
+    console.log("💾 Tentative de sauvegarde...");
+    console.log("Informations actuelles :", {
+      name,
+      executionMode,
+      repeatCount,
+      actionsCount: actions.length,
+      selectedKey
+    });
+
     if (!name.trim() || actions.length === 0) {
+      console.warn("⚠️ Sauvegarde annulée : nom vide ou aucune action.");
       setError("Veuillez remplir tous les champs");
       return;
     }
@@ -393,19 +444,26 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
           device: selectedKey?.startsWith('Mouse') ? 'mouse' : 'keyboard', 
           key: selectedKey || 'UNASSIGNED' 
         },
-        mode: isRepeatEnabled ? 'repeat' : 'once',
-        repeatCount: isRepeatEnabled ? (repeatCount > 0 ? repeatCount : 0) : undefined,
+        mode: executionMode,
+        repeatCount: executionMode === 'repeat' ? repeatCount : undefined,
+        repeatDelayMs: executionMode !== 'once' ? repeatDelay : undefined,
         actions
       };
+      
+      console.log("📤 Envoi de la macro au backend:", macro);
       const result = await saveMacro(macro as any);
+      console.log("📥 Résultat de la sauvegarde:", result);
+
       if (result.success) {
-        // Redirection vers le dashboard comme demandé par l'utilisateur
+        console.log("✅ Sauvegarde réussie, retour au dashboard");
         onBack();
         setView('dashboard');
       } else {
+        console.error("❌ Erreur retournée par saveMacro:", result.error);
         setError("Erreur lors de la sauvegarde");
       }
     } catch (error) {
+      console.error("💥 Erreur fatale lors de la sauvegarde:", error);
       setError("Erreur fatale lors de la sauvegarde");
     } finally {
       setIsSaving(false);
@@ -536,7 +594,20 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
           </div>
 
           <div className="flex items-center gap-6 no-drag">
-            <div className="flex items-center gap-4 px-6 py-3 rounded-2xl border border-white/5 bg-white/5">
+            <button
+              onClick={() => setIsFCapturing(!isFCapturing)}
+              data-ignore-record="true"
+              className={`flex items-center gap-3 px-6 py-4 rounded-2xl border transition-all font-black uppercase tracking-widest text-[10px] ${isFCapturing
+                ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20 animate-pulse'
+                : isLight ? 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100' : 'bg-white/5 border-white/10 text-slate-500 hover:bg-white/10'
+                }`}
+              title="Activer la capture de position (Appuyez sur 'F' ou Cliquez)"
+            >
+              <Target size={16} className={isFCapturing ? 'animate-spin-slow' : ''} />
+              {isFCapturing ? "Capture active (Clic ou 'F')" : "Capture Position"}
+            </button>
+
+            <div className="flex items-center gap-4 px-6 py-3 rounded-2xl border border-white/5 bg-white/5" data-ignore-record="true">
               <div className="flex flex-col gap-0.5">
                 <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Délai d'activation</span>
                 <div className="flex items-center gap-2">
@@ -554,6 +625,7 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
             <button
               onClick={handleSave}
               disabled={isSaving || isRecording}
+              data-ignore-record="true"
               className="flex items-center gap-3 px-10 py-4 rounded-2xl bg-primary text-white font-black uppercase tracking-[0.2em] text-xs transition-all shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 disabled:opacity-50"
             >
               {isSaving ? (
@@ -561,7 +633,7 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
               ) : (
                 <Save size={16} />
               )}
-              Sauvegarder
+              Enregistrer la Macro
             </button>
           </div>
         </div>
@@ -663,10 +735,8 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
                     <button
                       key={mode.id}
                       onClick={() => {
+                        console.log("🖱 Mode sélectionné:", mode.id);
                         setExecutionMode(mode.id as any);
-                        if (mode.id !== 'repeat') {
-                          setIsRepeatEnabled(mode.id === 'toggle');
-                        }
                       }}
                       className={`relative px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all flex flex-col items-center justify-center gap-1 ${executionMode === mode.id
                         ? 'bg-primary border-primary text-white shadow-lg'
@@ -680,12 +750,45 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
               </div>
 
               <AnimatePresence>
-                {executionMode === 'repeat' && (
+                {executionMode !== 'once' && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
+                  >
+                    <div className="flex flex-col gap-3 p-4 rounded-2xl bg-white/5 border border-white/5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Délai entre répétitions</span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={repeatDelay}
+                            onChange={(e) => setRepeatDelay(parseInt(e.target.value) || 0)}
+                            className="w-12 bg-transparent border-none text-primary font-black text-xs text-right outline-none"
+                          />
+                          <span className="text-[10px] font-black uppercase opacity-30">ms</span>
+                        </div>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5000"
+                        step="10"
+                        value={repeatDelay}
+                        onChange={(e) => setRepeatDelay(parseInt(e.target.value))}
+                        className="w-full accent-primary h-1.5 rounded-full appearance-none bg-white/10"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
+                {executionMode === 'repeat' && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden mt-2"
                   >
                     <div className="flex flex-col gap-3 p-4 rounded-2xl bg-white/5 border border-white/5">
                       <div className="flex justify-between items-center">
@@ -711,6 +814,7 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={toggleRecording}
+                data-ignore-record="true"
                 className={`w-full flex items-center justify-center gap-4 py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-sm transition-all shadow-2xl ${isRecording
                   ? 'bg-red-500 text-white shadow-red-500/40 animate-pulse'
                   : 'bg-[#2A2D33] text-white shadow-black/20'
@@ -719,12 +823,12 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
                 {isRecording ? (
                   <>
                     <Square size="20" fill="currentColor" />
-                    ARRÊTER
+                    ARRÊTER LA CAPTURE
                   </>
                 ) : (
                   <>
                     <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
-                    ENREGISTRER
+                    LANCER LA CAPTURE
                   </>
                 )}
               </motion.button>
@@ -736,11 +840,8 @@ const MacroEditor: React.FC<MacroEditorProps> = ({ selectedKey, onBack, initialM
               )}
 
               <button
-                onClick={async () => {
-                  if (window.confirm(`Voulez-vous vraiment supprimer la macro "${name}" ?`)) {
-                    await handleDelete();
-                  }
-                }}
+                onClick={handleDelete}
+                data-ignore-record="true"
                 className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border
                   ${isLight
                     ? 'bg-red-50 border-red-100 text-red-500 hover:bg-red-500 hover:text-white'

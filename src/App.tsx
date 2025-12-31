@@ -3,6 +3,7 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { DeviceMapper, MacroEditor, Settings, Dashboard, ErrorBoundary } from "./components";
 import ToastContainer from "./components/ToastContainer";
+import { normalizeKeyId } from "./utils/keyboardLayouts";
 import { LayoutGrid, List, X, Minus, ChevronDown, Zap, ChevronRight, ChevronLeft, Plus, FileSearch, Trash2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -16,7 +17,7 @@ function App() {
     if (e.dataTransfer) {
       e.dataTransfer.setData("text/plain", macroId);
       e.dataTransfer.effectAllowed = "copy";
-      
+
       // Ajout d'une image de prévisualisation fantôme plus propre si nécessaire
       const dragIcon = document.createElement('div');
       dragIcon.style.display = 'none';
@@ -60,11 +61,11 @@ function App() {
         const update = await check();
         if (update?.available) {
           addNotification(`Nouvelle version ${update.version} détectée. Téléchargement en cours...`, 'info');
-          
+
           await update.downloadAndInstall();
-          
+
           addNotification('Mise à jour installée. Redémarrage de l\'application...', 'success');
-          
+
           // Petit délai pour que l'utilisateur puisse lire la notification
           setTimeout(async () => {
             await relaunch();
@@ -129,10 +130,8 @@ function App() {
   useEffect(() => {
     const init = async () => {
       try {
-        const defaultPath = "C:\\Users\\Admin\\Documents\\MacroX";
-        await invoke('init_custom_folder', { path: defaultPath });
-        const config = await invoke('get_config') as { macros: any[], settings: any };
-        if (config.macros) setMacros(config.macros);
+        await invoke('init_folders');
+        const config = await invoke('get_config') as { settings: any };
         if (config.settings) loadConfig();
       } catch (err) {
         console.error("Failed to init app:", err);
@@ -169,13 +168,30 @@ function App() {
   };
 
   const handleSelectKey = (key: string | null) => {
-    setSelectedKey(key);
+    console.log("🖱 Click sur touche détecté:", key);
+    const normalizedKey = key ? normalizeKeyId(key) : null;
+    console.log("🔑 Touche normalisée:", normalizedKey);
+
+    setSelectedKey(normalizedKey);
     setForceEditor(false);
-    if (key) {
-      // S'assurer qu'on est sur le dashboard pour voir l'éditeur
+
+    if (normalizedKey) {
       setView('dashboard');
       setIsSidebarOpen(false);
-      setEditingMacroId(null);
+
+      // Chercher si une macro existe déjà pour cette touche
+      const existingMacro = macros.find(m => {
+        const mKey = m.trigger?.key ? normalizeKeyId(m.trigger.key) : null;
+        return mKey === normalizedKey;
+      });
+
+      if (existingMacro) {
+        console.log("✨ Macro existante trouvée:", existingMacro.id);
+        setEditingMacroId(existingMacro.id);
+      } else {
+        console.log("📝 Pas de macro existante, mode création");
+        setEditingMacroId(null);
+      }
     } else {
       setEditingMacroId(null);
     }
@@ -294,6 +310,15 @@ function App() {
           activeProfile={activeProfile}
           selectedKey={selectedKey}
           onSelectKey={handleSelectKey}
+          onEditMacro={(id) => {
+            setEditingMacroId(id);
+            const macro = macros.find(m => m.id === id);
+            if (macro?.trigger?.key) {
+              setSelectedKey(normalizeKeyId(macro.trigger.key));
+            } else {
+              setSelectedKey(null);
+            }
+          }}
           onDragStart={handleDragStart}
           onDrop={async (e, keyId) => {
             const macroId = e.dataTransfer.getData("text/plain");
@@ -320,7 +345,7 @@ function App() {
             { id: 'list', icon: <List size={22} />, label: 'Macros' },
           ].map(item => {
             const isActive = item.id === 'list' ? isEditorActive : (view === 'dashboard' && !isEditorActive);
-            
+
             return (
               <button
                 key={item.id}
@@ -378,157 +403,155 @@ function App() {
         </div>
 
         <header data-tauri-drag-region className={`h-24 flex-none flex items-center px-12 relative border-b ${isLight ? 'bg-[#FFFFFF] border-[#E9ECEF]' : 'bg-[#0f111a] border-white/5'}`}>
-            <div className={`relative z-50 flex items-center gap-4 no-drag`} onClick={(e) => e.stopPropagation()}>
-              <div
-                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all border ${isLight
-                    ? 'bg-white border-slate-200 hover:border-primary hover:text-primary shadow-sm'
-                    : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
-                  }`}
-              >
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Profil Actif</span>
-                  <span className="text-xs font-black uppercase tracking-widest truncate max-w-[120px]">
-                    {activeProfile || 'Choisir...'}
-                  </span>
-                </div>
-                <ChevronDown size={14} className={`transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+          <div className={`relative z-50 flex items-center gap-4 no-drag`} onClick={(e) => e.stopPropagation()}>
+            <div
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all border ${isLight
+                ? 'bg-white border-slate-200 hover:border-primary hover:text-primary shadow-sm'
+                : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
+                }`}
+            >
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Profil Actif</span>
+                <span className="text-xs font-black uppercase tracking-widest truncate max-w-[120px]">
+                  {activeProfile || 'Choisir...'}
+                </span>
               </div>
+              <ChevronDown size={14} className={`transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+            </div>
 
             {/* Menu des Profils */}
             <AnimatePresence>
               {isProfileMenuOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className={`absolute top-full left-0 mt-2 w-64 p-2 rounded-2xl border shadow-xl flex flex-col gap-1 max-h-[300px] overflow-y-auto custom-scrollbar ${isLight ? 'bg-white border-slate-100' : 'bg-[#1a1d23] border-white/10'
-                      }`}
-                  >
-                    {profiles.map(p => (
-                      <div
-                        key={p.name}
-                        onClick={() => {
-                          if (profileToRename !== p.name) {
-                            setProfile(p.name);
-                            setIsProfileMenuOpen(false);
-                          }
-                        }}
-                        onContextMenu={(e) => handleContextMenu(e, p.name)}
-                        className={`group relative flex items-center justify-between px-4 py-3 rounded-xl transition-all cursor-pointer ${activeProfile === p.name
-                            ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                            : isLight
-                              ? 'hover:bg-slate-50 text-slate-600'
-                              : 'hover:bg-white/5 text-slate-300'
-                          }`}
-                      >
-                        {profileToRename === p.name ? (
-                          <input
-                            autoFocus
-                            type="text"
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleFinishRename();
-                              if (e.key === 'Escape') setProfileToRename(null);
-                            }}
-                            onBlur={handleFinishRename}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-full bg-transparent border-none outline-none font-black uppercase text-xs"
-                          />
-                        ) : (
-                          <>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-black uppercase tracking-widest truncate">{p.name}</span>
-                              {activeProfile === p.name && <span className="text-[8px] opacity-50 font-bold uppercase">Actuel</span>}
-                            </div>
-                            
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStartRename(p.name);
-                                }}
-                                className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all ${
-                                  activeProfile === p.name 
-                                    ? 'hover:bg-white/20 text-white' 
-                                    : isLight ? 'hover:bg-slate-200 text-slate-400 hover:text-primary' : 'hover:bg-white/10 text-white/30 hover:text-primary'
-                                }`}
-                                title="Renommer"
-                              >
-                                <FileSearch size={12} />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteProfile(p.name);
-                                }}
-                                disabled={p.name === 'Default'}
-                                className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all ${
-                                  p.name === 'Default'
-                                    ? 'opacity-0 cursor-default'
-                                    : activeProfile === p.name
-                                      ? 'hover:bg-red-500/20 text-white hover:text-red-200'
-                                      : isLight ? 'hover:bg-red-50 text-slate-400 hover:text-red-500' : 'hover:bg-red-500/10 text-white/30 hover:text-red-500'
-                                }`}
-                                title="Supprimer"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-
-                    <div className="h-px bg-white/5 my-1" />
-
-                    <button
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className={`absolute top-full left-0 mt-2 w-64 p-2 rounded-2xl border shadow-xl flex flex-col gap-1 max-h-[300px] overflow-y-auto custom-scrollbar ${isLight ? 'bg-white border-slate-100' : 'bg-[#1a1d23] border-white/10'
+                    }`}
+                >
+                  {profiles.map(p => (
+                    <div
+                      key={p.name}
                       onClick={() => {
-                        setIsCreatingProfile(true);
-                        setIsProfileMenuOpen(false);
+                        if (profileToRename !== p.name) {
+                          setProfile(p.name);
+                          setIsProfileMenuOpen(false);
+                        }
                       }}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest ${isLight ? 'hover:bg-purple-50 text-purple-600' : 'hover:bg-purple-500/10 text-purple-400'
+                      onContextMenu={(e) => handleContextMenu(e, p.name)}
+                      className={`group relative flex items-center justify-between px-4 py-3 rounded-xl transition-all cursor-pointer ${activeProfile === p.name
+                        ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                        : isLight
+                          ? 'hover:bg-slate-50 text-slate-600'
+                          : 'hover:bg-white/5 text-slate-300'
                         }`}
                     >
-                      <Plus size={14} />
-                      Nouveau Profil
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                      {profileToRename === p.name ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleFinishRename();
+                            if (e.key === 'Escape') setProfileToRename(null);
+                          }}
+                          onBlur={handleFinishRename}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-transparent border-none outline-none font-black uppercase text-xs"
+                        />
+                      ) : (
+                        <>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-black uppercase tracking-widest truncate">{p.name}</span>
+                            {activeProfile === p.name && <span className="text-[8px] opacity-50 font-bold uppercase">Actuel</span>}
+                          </div>
 
-              {/* Menu Contextuel */}
-              {contextMenu && (
-                <div
-                  className={`fixed z-[999] w-40 py-1 rounded-xl border shadow-2xl flex flex-col overflow-hidden ${isLight ? 'bg-white border-slate-100' : 'bg-[#1a1d23] border-white/10'
-                    }`}
-                  style={{ top: contextMenu.y, left: contextMenu.x }}
-                >
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartRename(p.name);
+                              }}
+                              className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all ${activeProfile === p.name
+                                ? 'hover:bg-white/20 text-white'
+                                : isLight ? 'hover:bg-slate-200 text-slate-400 hover:text-primary' : 'hover:bg-white/10 text-white/30 hover:text-primary'
+                                }`}
+                              title="Renommer"
+                            >
+                              <FileSearch size={12} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteProfile(p.name);
+                              }}
+                              disabled={p.name === 'Default'}
+                              className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all ${p.name === 'Default'
+                                ? 'opacity-0 cursor-default'
+                                : activeProfile === p.name
+                                  ? 'hover:bg-red-500/20 text-white hover:text-red-200'
+                                  : isLight ? 'hover:bg-red-50 text-slate-400 hover:text-red-500' : 'hover:bg-red-500/10 text-white/30 hover:text-red-500'
+                                }`}
+                              title="Supprimer"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+
+                  <div className="h-px bg-white/5 my-1" />
+
                   <button
-                    onClick={() => handleStartRename(contextMenu.profile)}
-                    className={`px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-colors ${isLight ? 'hover:bg-slate-50 text-slate-600' : 'hover:bg-white/5 text-slate-300'
+                    onClick={() => {
+                      setIsCreatingProfile(true);
+                      setIsProfileMenuOpen(false);
+                    }}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest ${isLight ? 'hover:bg-purple-50 text-purple-600' : 'hover:bg-purple-500/10 text-purple-400'
                       }`}
                   >
-                    <FileSearch size={12} />
-                    Renommer
+                    <Plus size={14} />
+                    Nouveau Profil
                   </button>
-                  <button
-                    onClick={() => handleDeleteProfile(contextMenu.profile)}
-                    disabled={contextMenu.profile === 'Default'}
-                    className={`px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-colors ${contextMenu.profile === 'Default'
-                        ? 'opacity-30 cursor-not-allowed'
-                        : isLight
-                          ? 'hover:bg-red-50 text-red-500'
-                          : 'hover:bg-red-500/10 text-red-500'
-                      }`}
-                  >
-                    <Trash2 size={12} />
-                    Supprimer
-                  </button>
-                </div>
+                </motion.div>
               )}
-            </div>
+            </AnimatePresence>
+
+            {/* Menu Contextuel */}
+            {contextMenu && (
+              <div
+                className={`fixed z-[999] w-40 py-1 rounded-xl border shadow-2xl flex flex-col overflow-hidden ${isLight ? 'bg-white border-slate-100' : 'bg-[#1a1d23] border-white/10'
+                  }`}
+                style={{ top: contextMenu.y, left: contextMenu.x }}
+              >
+                <button
+                  onClick={() => handleStartRename(contextMenu.profile)}
+                  className={`px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-colors ${isLight ? 'hover:bg-slate-50 text-slate-600' : 'hover:bg-white/5 text-slate-300'
+                    }`}
+                >
+                  <FileSearch size={12} />
+                  Renommer
+                </button>
+                <button
+                  onClick={() => handleDeleteProfile(contextMenu.profile)}
+                  disabled={contextMenu.profile === 'Default'}
+                  className={`px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-colors ${contextMenu.profile === 'Default'
+                    ? 'opacity-30 cursor-not-allowed'
+                    : isLight
+                      ? 'hover:bg-red-50 text-red-500'
+                      : 'hover:bg-red-500/10 text-red-500'
+                    }`}
+                >
+                  <Trash2 size={12} />
+                  Supprimer
+                </button>
+              </div>
+            )}
+          </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
             <h1 className={`text-6xl font-black tracking-tighter flex items-center gap-0.5 ${isLight ? 'text-[#212529]' : 'text-white'}`}>
               MACRO<span className="text-transparent bg-clip-text bg-gradient-to-br from-[#8b5cf6] to-[#ec4899] drop-shadow-[0_0_35px_rgba(139,92,246,0.7)]">X</span>
@@ -538,7 +561,7 @@ function App() {
 
         <div className="flex-1 overflow-hidden relative">
           <ErrorBoundary>{renderContent()}</ErrorBoundary>
-          
+
           {/* SIDEBAR: Liste des macros (se superpose uniquement sur le dashboard) */}
           <AnimatePresence>
             {isSidebarOpen && view === 'dashboard' && !editingMacroId && !selectedKey && !forceEditor && (
@@ -548,9 +571,8 @@ function App() {
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className={`absolute top-0 right-0 w-[320px] h-full z-40 border-l shadow-2xl flex flex-col ${
-                  isLight ? 'bg-white border-slate-100' : 'bg-[#0a0c14] border-l border-purple-500/20 shadow-[0_0_40px_rgba(0,0,0,0.5)]'
-                }`}
+                className={`absolute top-0 right-0 w-[320px] h-full z-40 border-l shadow-2xl flex flex-col ${isLight ? 'bg-white border-slate-100' : 'bg-[#0a0c14] border-l border-purple-500/20 shadow-[0_0_40px_rgba(0,0,0,0.5)]'
+                  }`}
               >
                 <button
                   onClick={() => setIsSidebarOpen(false)}
@@ -589,7 +611,7 @@ function App() {
                       </button>
                     </div>
                   </div>
-                  
+
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
                     {macros.length === 0 ? (
                       <div className={`h-full flex flex-col items-center justify-center text-center p-8 gap-6 ${isLight ? 'opacity-20 text-[#212529]' : 'opacity-10 text-white'}`}>
@@ -599,29 +621,61 @@ function App() {
                     ) : (
                       <Reorder.Group axis="y" values={macros} onReorder={setMacros} className="flex flex-col gap-4">
                         {macros.map(macro => (
-                          <Reorder.Item 
-                            key={macro.id} 
-                            value={macro} 
+                          <Reorder.Item
+                            key={macro.id}
+                            value={macro}
                             draggable
-                            onDragStart={(e) => handleDragStart(e as any, macro.id)} 
+                            onDragStart={(e) => handleDragStart(e as any, macro.id)}
                             className="relative group cursor-grab active:cursor-grabbing"
                             style={{ x: 0 }}
                           >
-                            <motion.div onClick={() => { setEditingMacroId(macro.id); setIsSidebarOpen(false); }} className={`flex items-center gap-4 p-5 rounded-[2rem] border transition-all text-left cursor-pointer ${selectedKey === (macro.trigger?.key) || editingMacroId === macro.id ? 'border-primary bg-primary/5' : isLight ? 'bg-white border-[#E9ECEF] text-[#212529]' : 'bg-white/5 border-white/5 text-white'}`}>
-                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isLight ? 'bg-[#F8F9FA] text-primary' : 'bg-primary/20 text-primary'}`}><Zap size={24} fill="currentColor" /></div>
+                            <motion.div
+                              onClick={() => {
+                                setEditingMacroId(macro.id);
+                                if (macro.trigger?.key) {
+                                  setSelectedKey(normalizeKeyId(macro.trigger.key));
+                                } else {
+                                  setSelectedKey(null);
+                                }
+                                setIsSidebarOpen(false);
+                              }}
+                              className={`flex items-center gap-4 p-5 rounded-[2rem] border transition-all text-left cursor-pointer ${(macro.trigger?.key && selectedKey === normalizeKeyId(macro.trigger.key)) || editingMacroId === macro.id
+                                ? 'border-primary bg-primary/5'
+                                : isLight ? 'bg-white border-[#E9ECEF] text-[#212529]' : 'bg-white/5 border-white/5 text-white'
+                                }`}
+                            >
+                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isLight ? 'bg-[#F8F9FA] text-primary' : 'bg-primary/20 text-primary'}`}>
+                                <Zap size={24} fill="currentColor" />
+                              </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-[12px] font-black uppercase tracking-widest truncate">{macro.name || "Sans nom"}</p>
-                                <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/10 text-primary">{macro.trigger?.key || "Non assigné"}</span>
+                                <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                  {macro.trigger?.key || "Non assigné"}
+                                </span>
                               </div>
                               <div className="flex items-center gap-1">
-                                <button onClick={(e) => { e.stopPropagation(); setEditingMacroId(macro.id); setIsSidebarOpen(false); }} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/5"><FileSearch size={18} /></button>
-                                <button 
-                                  onClick={async (e) => { 
-                                    e.stopPropagation(); 
-                                    if (window.confirm(`Voulez-vous vraiment supprimer la macro "${macro.name}" ?`)) {
-                                      await deleteMacro(macro.name); 
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingMacroId(macro.id);
+                                    if (macro.trigger?.key) {
+                                      setSelectedKey(normalizeKeyId(macro.trigger.key));
+                                    } else {
+                                      setSelectedKey(null);
                                     }
-                                  }} 
+                                    setIsSidebarOpen(false);
+                                  }}
+                                  className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/5"
+                                >
+                                  <FileSearch size={18} />
+                                </button>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Voulez-vous vraiment supprimer la macro "${macro.name}" ?`)) {
+                                      await deleteMacro(macro.id);
+                                    }
+                                  }}
                                   className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-red-500/10 hover:text-red-500"
                                 >
                                   <Trash2 size={18} />

@@ -20,6 +20,7 @@ lazy_static! {
 pub fn set_capturing(capturing: bool) {
     let mut is_capturing = IS_CAPTURING.lock().unwrap();
     *is_capturing = capturing;
+    println!("🦀 Rust: Capture d'écran définie sur {}", capturing);
 }
 
 pub fn start_hook(app_handle: AppHandle) {
@@ -27,6 +28,7 @@ pub fn start_hook(app_handle: AppHandle) {
     reload_macros();
 
     thread::spawn(move || {
+        println!("🦀 Rust: Démarrage du hook grab...");
         if let Err(error) = grab(move |event| {
             handle_event(event)
         }) {
@@ -55,21 +57,36 @@ fn handle_event(event: Event) -> Option<Event> {
     let app_handle_guard = APP_HANDLE.lock().unwrap();
     let app_handle = app_handle_guard.as_ref();
 
-    // Gestion de la capture de position (Touche F)
+    // Gestion de la capture de position (Touche F ou Clic Gauche)
     let mut capturing = IS_CAPTURING.lock().unwrap();
     if *capturing {
-        if let EventType::KeyPress(rdev::Key::KeyF) = event.event_type {
+        println!("🦀 Rust: Événement reçu pendant capture: {:?}", event.event_type);
+        let should_capture = match event.event_type {
+            EventType::KeyPress(rdev::Key::KeyF) => {
+                println!("🦀 Rust: Touche F pressée pendant la capture");
+                true
+            },
+            EventType::ButtonPress(rdev::Button::Left) => {
+                println!("🦀 Rust: Clic Gauche pressé pendant la capture");
+                true
+            },
+            _ => false,
+        };
+
+        if should_capture {
             if let Some(handle) = app_handle {
                 // On utilise enigo pour obtenir la position globale car rdev n'est pas fiable pour ça sur toutes les plateformes
                 use enigo::MouseControllable;
                 let enigo = enigo::Enigo::new();
                 let (x, y) = enigo.mouse_location();
                 
+                println!("🦀 Rust: Position capturée: X={}, Y={}", x, y);
                 let _ = handle.emit("position-captured", (x, y));
-                *capturing = false; // On arrête la capture après le premier F
-                return None; // On bloque la touche F pendant la capture
+                *capturing = false; // On arrête la capture après le premier F ou clic
+                return None; // On bloque l'événement pendant la capture
             }
         } else if let EventType::KeyPress(rdev::Key::Escape) = event.event_type {
+            println!("🦀 Rust: Capture annulée par ESC");
             *capturing = false; // Annuler la capture avec Escape
             return None;
         }
@@ -91,7 +108,6 @@ fn handle_event(event: Event) -> Option<Event> {
     if let Some(m) = macros.get(&key_name) {
         match event.event_type {
             EventType::KeyPress(_) | EventType::ButtonPress(_) => {
-                let mut active = ACTIVE_MACROS.lock().unwrap();
                 match m.mode {
                     ExecutionMode::Once => {
                         let m_clone = m.clone();
@@ -100,10 +116,19 @@ fn handle_event(event: Event) -> Option<Event> {
                         });
                     }
                     ExecutionMode::Toggle => {
-                        if active.contains(&m.id) {
+                        let is_already_active = {
+                            let active = ACTIVE_MACROS.lock().unwrap();
+                            active.contains(&m.id)
+                        };
+
+                        if is_already_active {
+                            let mut active = ACTIVE_MACROS.lock().unwrap();
                             active.remove(&m.id);
                         } else {
-                            active.insert(m.id.clone());
+                            {
+                                let mut active = ACTIVE_MACROS.lock().unwrap();
+                                active.insert(m.id.clone());
+                            }
                             let m_clone = m.clone();
                             tauri::async_runtime::spawn(async move {
                                 run_macro(m_clone).await;
@@ -111,8 +136,16 @@ fn handle_event(event: Event) -> Option<Event> {
                         }
                     }
                     ExecutionMode::Hold => {
-                        if !active.contains(&m.id) {
-                            active.insert(m.id.clone());
+                        let is_already_active = {
+                            let active = ACTIVE_MACROS.lock().unwrap();
+                            active.contains(&m.id)
+                        };
+
+                        if !is_already_active {
+                            {
+                                let mut active = ACTIVE_MACROS.lock().unwrap();
+                                active.insert(m.id.clone());
+                            }
                             let m_clone = m.clone();
                             tauri::async_runtime::spawn(async move {
                                 run_macro(m_clone).await;

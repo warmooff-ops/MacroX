@@ -9,13 +9,14 @@ interface DashboardProps {
   activeProfile?: string;
   selectedKey: string | null;
   onSelectKey: (key: string) => void;
+  onEditMacro?: (id: string) => void;
   onDrop?: (e: React.DragEvent, keyId: string) => void;
   onDragStart?: (e: React.DragEvent, macroId: string) => void;
   theme?: string;
   isSidebarOpen?: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ activeProfile, selectedKey, onSelectKey, onDrop, onDragStart, theme, isSidebarOpen }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ activeProfile, selectedKey, onSelectKey, onEditMacro, onDrop, onDragStart, theme, isSidebarOpen }) => {
   const { macros, deleteMacro, bindMacroToKey } = useStore();
   const unassignedMacros = macros.filter(m => m.trigger?.key === 'UNASSIGNED');
 
@@ -121,8 +122,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeProfile, selectedKey
                         : 'bg-white/5 border-white/5 hover:border-white/10 hover:bg-white/10'
                     }`}
                     onClick={() => {
-                      // Optionnel: Ouvrir l'édition ou permettre l'assignation
-                      onSelectKey('UNASSIGNED');
+                      if (onEditMacro) {
+                        onEditMacro(macro.id);
+                      } else {
+                        onSelectKey('UNASSIGNED');
+                      }
                     }}
                   >
                     <div className="flex flex-col gap-3">
@@ -134,7 +138,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeProfile, selectedKey
                           onClick={async (e) => {
                             e.stopPropagation();
                             if (window.confirm(`Voulez-vous vraiment supprimer la macro "${macro.name}" ?`)) {
-                              await deleteMacro(macro.name);
+                              await deleteMacro(macro.id);
                             }
                           }}
                           className={`p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 ${isLight ? 'hover:bg-red-50 text-slate-300 hover:text-red-500' : 'hover:bg-red-500/20 text-white/20 hover:text-red-400'}`}

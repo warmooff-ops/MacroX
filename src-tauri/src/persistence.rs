@@ -4,23 +4,40 @@ use crate::models::{MacroConfig, AppSettings, Config, Profile};
 use base64::{Engine as _, engine::general_purpose};
 
 pub fn get_app_data_dir() -> PathBuf {
-    // Récupère le chemin vers C:\Users\Nom\Documents\MacroX
-    let mut path = directories::UserDirs::new()
-        .and_then(|dirs| dirs.document_dir().map(|d| d.to_path_buf()))
-        .unwrap_or_else(|| {
-            // Fallback si document_dir échoue
-            match std::env::var("USERPROFILE") {
-                Ok(val) => PathBuf::from(val).join("Documents"),
-                Err(_) => PathBuf::from("./data")
+    #[cfg(target_os = "linux")]
+    {
+        // Sur Linux, on utilise le dossier de config standard (~/.config/MacroX)
+        if let Some(proj_dirs) = directories::ProjectDirs::from("", "", "MacroX") {
+            let path = proj_dirs.config_dir().to_path_buf();
+            if !path.exists() {
+                fs::create_dir_all(&path).expect("Failed to create MacroX directory in .config");
             }
-        });
-    
-    path.push("MacroX");
-
-    if !path.exists() {
-        fs::create_dir_all(&path).expect("Failed to create MacroX directory in Documents");
+            return path;
+        }
+        // Fallback si ProjectDirs échoue
+        return PathBuf::from("./macrox_data"); 
     }
-    path
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Windows & Mac : On garde le dossier Documents/MacroX
+        let mut path = directories::UserDirs::new()
+            .and_then(|dirs| dirs.document_dir().map(|d| d.to_path_buf()))
+            .unwrap_or_else(|| {
+                // Fallback si document_dir échoue
+                match std::env::var("USERPROFILE") {
+                    Ok(val) => PathBuf::from(val).join("Documents"),
+                    Err(_) => PathBuf::from("./data")
+                }
+            });
+        
+        path.push("MacroX");
+
+        if !path.exists() {
+            fs::create_dir_all(&path).expect("Failed to create MacroX directory in Documents");
+        }
+        path
+    }
 }
 
 pub fn get_macros_dir(profile: &str) -> PathBuf {
@@ -152,19 +169,27 @@ pub fn delete_profile(name: &str) -> Result<(), String> {
 
 pub fn load_all_macros(profile: &str) -> Vec<MacroConfig> {
     let macros_dir = get_macros_dir(profile);
+    println!("📂 [Persistence] Chargement des macros depuis : {:?}", macros_dir);
     let mut macros = Vec::new();
-    if let Ok(entries) = fs::read_dir(macros_dir) {
+    if let Ok(entries) = fs::read_dir(&macros_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Ok(content) = fs::read_to_string(path) {
-                    if let Ok(macro_config) = serde_json::from_str::<MacroConfig>(&content) {
-                        macros.push(macro_config);
+                if let Ok(content) = fs::read_to_string(&path) {
+                    match serde_json::from_str::<MacroConfig>(&content) {
+                        Ok(macro_config) => {
+                            println!("  ✅ Macro chargée : {} ({})", macro_config.name, macro_config.trigger.key);
+                            macros.push(macro_config);
+                        },
+                        Err(e) => eprintln!("  ❌ Erreur de désérialisation pour {:?}: {}", path, e),
                     }
                 }
             }
         }
+    } else {
+        eprintln!("  ⚠️ Impossible de lire le dossier des macros : {:?}", macros_dir);
     }
+    println!("  📊 Total macros trouvées : {}", macros.len());
     macros
 }
 
@@ -178,11 +203,9 @@ pub fn save_macro(macro_config: &MacroConfig, profile: &str) -> Result<(), Strin
     
     // Nettoyage rigoureux du nom de fichier pour Windows
     // On remplace tout ce qui n'est pas alphanumérique par un underscore
-    let safe_name = macro_config.name.chars()
-        .map(|c: char| if c.is_alphanumeric() { c } else { '_' })
-        .collect::<String>();
-        
-    let path = macros_dir.join(format!("{}.json", safe_name));
+    // Utiliser l'ID comme nom de fichier pour éviter les doublons lors du renommage
+    let filename = format!("{}.json", macro_config.id);
+    let path = macros_dir.join(filename);
 
     let content = serde_json::to_string_pretty(macro_config)
         .map_err(|e| format!("Erreur de sérialisation : {}", e))?;
@@ -193,48 +216,16 @@ pub fn save_macro(macro_config: &MacroConfig, profile: &str) -> Result<(), Strin
     Ok(())
 }
 
-pub fn delete_macro(name: &str, profile: &str) -> Result<(), String> {
-    if name.is_empty() {
-        return Err("Le nom de la macro ne peut pas être vide".to_string());
-    }
-
-    let safe_name = name.chars()
-        .map(|c: char| if c.is_alphanumeric() { c } else { '_' })
-        .collect::<String>();
-    
+pub fn delete_macro(macro_id: &str, profile: &str) -> Result<(), String> {
     let macros_dir = get_macros_dir(profile);
-    let path = macros_dir.join(format!("{}.json", safe_name));
+    let path = macros_dir.join(format!("{}.json", macro_id));
     
-    println!("Tentative de suppression de la macro : {} (fichier: {:?})", name, path);
-
     if path.exists() {
-        fs::remove_file(&path).map_err(|e| format!("Erreur lors de la suppression du fichier {:?} : {}", path, e))?;
-        println!("Macro '{}' supprimée avec succès.", name);
-        Ok(())
-    } else {
-        // Si le fichier direct n'existe pas, essayons de trouver un fichier qui contient cet ID
-        // (au cas où le nom du fichier et le nom interne seraient désynchronisés)
-        println!("Fichier non trouvé par nom normalisé. Recherche par contenu...");
-        
-        if let Ok(entries) = fs::read_dir(&macros_dir) {
-            for entry in entries.flatten() {
-                let entry_path = entry.path();
-                if entry_path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Ok(content) = fs::read_to_string(&entry_path) {
-                        if let Ok(macro_config) = serde_json::from_str::<MacroConfig>(&content) {
-                            if macro_config.name == name {
-                                fs::remove_file(&entry_path).map_err(|e| format!("Erreur lors de la suppression du fichier trouvé par contenu {:?} : {}", entry_path, e))?;
-                                println!("Macro '{}' trouvée par contenu et supprimée ({:?}).", name, entry_path);
-                                return Ok(());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Err(format!("La macro '{}' n'a pas pu être trouvée (chemin tenté: {:?})", name, path))
+        fs::remove_file(path)
+            .map_err(|e| format!("Erreur lors de la suppression : {}", e))?;
     }
+    
+    Ok(())
 }
 
 pub fn export_to_base64(macro_config: &MacroConfig) -> String {
