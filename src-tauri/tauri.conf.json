@@ -1,6 +1,6 @@
 {
   "productName": "MacroX",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.macrox.studio",
   "build": {
     "beforeDevCommand": "npm run dev",
